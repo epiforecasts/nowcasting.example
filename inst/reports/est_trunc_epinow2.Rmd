@@ -2,7 +2,9 @@
 title: Estimating reporting delays with EpiNow2
 ---
 
-```{r init, include = FALSE}
+# Load required libraries
+
+```{r init}
 library("EpiNow2")
 library("mpx.nowcasting") ## devtools::install()
 library("dplyr")
@@ -62,8 +64,8 @@ est$dist
 
 cmf <- rstan::extract(est$fit, "cmf")[[1]]
 colnames(cmf) <- seq(max_delay, 1, by = -1) 
-pmf <- posterior::as_draws_df(cmf) |>
-  tidyr::pivot_longer(c(-.chain, -.iteration, -.draw),
+pmf <- as_draws_df(cmf) |>
+  pivot_longer(c(-.chain, -.iteration, -.draw),
                       names_to = "delay") |>
   mutate(delay = as.integer(delay)) |>
   arrange(delay) |>
@@ -104,14 +106,9 @@ emp_cdf <- data.frame(
 ddislnorm <- function(x, meanlog, sdlog) {
   return(plnorm(x, meanlog, sdlog) - plnorm(x - 1, meanlog, sdlog))
 }
+pdislnorm <- plnorm
+qdislnorm <- qlnorm
 
-pdislnorm <- function(q, meanlog, sdlog) {
-  return(plnorm(q, meanlog, sdlog))
-}
-
-qdislnorm <- function(p, meanlog, sdlog) {
-  return(qlnorm(p, meanlog, sdlog))
-}
 y <- fitdist(
   positive_df$delay,
   "dislnorm",

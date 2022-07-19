@@ -1,0 +1,144 @@
+---
+title: Estimating reporting delays with EpiNow2
+---
+
+```{r init, include = FALSE}
+library("EpiNow2")
+library("mpx.nowcasting") ## devtools::install()
+library("dplyr")
+library("ggplot2")
+library("rstan")
+library("posterior")
+library("tidyr")
+library("fitdistrplus")
+```
+# Load the data
+
+```{r load_data}
+df <- load_data()
+max_delay <- max(df$delay, na.rm = TRUE)
+```
+
+# Data exploration
+
+```{r plot_data}
+ggplot(df, aes(x = delay)) +
+  geom_histogram(binwidth = 1) +
+  theme_bw()
+```
+
+There are negative delays (report before onset) - presumably representing either data entry errors or positive tests during the incubation period so hard to characterise as part of the reporting delay distribution.
+
+```{r negative_delays}
+df |>
+  filter(delay < 0)
+```
+
+There is also a significant excess at delay 0, which does not connect smoothly to the rest of the distribution and therefore seems to represent a separate process.
+
+# Estimating the reporting delay
+
+We use `EpiNow2` to estimate the distribution of reporting delays greater than 0.
+
+```{r estimate_delays}
+positive_df <- df |>
+  filter(delay > 0)
+snapshots <- create_snapshots(positive_df, max_delay)
+est <- suppressWarnings(estimate_truncation(
+  snapshots,
+  max_truncation = max_delay,
+  chains = 2, iter = 2000,
+  verbose = FALSE
+))
+
+## parameters of lognormal fit
+est$dist
+```
+
+# Mean delay
+
+```{r pmf}
+## Extract probability mass function
+
+cmf <- rstan::extract(est$fit, "cmf")[[1]]
+colnames(cmf) <- seq(max_delay, 1, by = -1) 
+pmf <- posterior::as_draws_df(cmf) |>
+  tidyr::pivot_longer(c(-.chain, -.iteration, -.draw),
+                      names_to = "delay") |>
+  mutate(delay = as.integer(delay)) |>
+  arrange(delay) |>
+  group_by(.iteration, .chain, .draw) |>
+  mutate(value = diff(c(0, value)))
+
+## Calculate per-sample mean
+mean <- pmf |>
+  group_by(.chain, .iteration, .draw) |>
+  summarise(mean = sum(delay * value), .groups = "drop") |>
+  summarise(
+    est = mean(mean),
+    lower = quantile(mean, 0.025),
+    upper = quantile(mean, 0.975)
+  )
+
+## Estimate + 95% CI of mean reporting delay
+mean
+```
+
+# Comparison to simpler approaches
+
+## Empirical delay
+
+```{r empirical}
+x <- 1:26
+emp <- ecdf(positive_df$delay)
+emp_cdf <- data.frame(
+  delay = x,
+  cdf = emp(x),
+  Method = "empirical"
+)
+```
+
+## Discretised lognormal fitted directly
+
+```{r dislnorm}
+ddislnorm <- function(x, meanlog, sdlog) {
+  return(plnorm(x, meanlog, sdlog) - plnorm(x - 1, meanlog, sdlog))
+}
+
+pdislnorm <- function(q, meanlog, sdlog) {
+  return(plnorm(q, meanlog, sdlog))
+}
+
+qdislnorm <- function(p, meanlog, sdlog) {
+  return(qlnorm(p, meanlog, sdlog))
+}
+y <- fitdist(
+  positive_df$delay,
+  "dislnorm",
+  start = list(meanlog = 0, sdlog = 1)
+)
+ln <- pdislnorm(1:26, y$estimate[1], y$estimate[2])
+ln_cdf <- data.frame(delay = x, cdf = ln, Method = "direct")
+
+epinow_cdf <- est$cmf |>
+  rename(delay = index, cdf = mean) |>
+  mutate(Method = "EpiNow2")
+```
+
+## Comparison
+
+```{r compare}
+combined <- bind_rows(
+  emp_cdf,
+  ln_cdf,
+  epinow_cdf
+)
+
+ggplot(combined, aes(x = delay, y = cdf, linetype = Method)) +
+  geom_line() +
+  geom_ribbon(
+    mapping = aes(ymin = lower_90, ymax = upper_90),
+    alpha = 0.25
+  ) +
+  theme_bw()
+```

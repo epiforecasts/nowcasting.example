@@ -4,9 +4,11 @@
 ##' @title n/a
 ##' @return a data frame
 ##' @importFrom here here
+##' @importFrom dplyr mutate
 ##' @author Sebastian Funk
 load_data <- function() {
-  df <- readRDS(here::here("data", "linelist_sf.rds"))
+  df <- readRDS(here::here("data", "linelist_sf.rds")) |>
+    dplyr::mutate(delay = as.integer(report_date - date_onset))
   return(df)
 }
 

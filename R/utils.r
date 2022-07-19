@@ -41,7 +41,7 @@ create_snapshots <- function(x, max_delay) {
       tidyr::complete(
         date_onset = seq(
           min(date_onset),
-          max(.x, min(date_onset) + max_delay),
+          max(.x, min(date_onset) + max_delay - 1),
           by = "day"),
         fill =  list(confirm = 0)
       ) |>

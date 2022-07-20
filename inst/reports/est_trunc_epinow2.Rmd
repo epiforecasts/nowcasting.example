@@ -157,6 +157,7 @@ reported_cases <- df |>
 ## interpreted as log-normally distributed with 95% contained between 5.9 and 21.4:
 ## => \mu*/\sigma*^2 = 5.9; \mu* * \sigma*^2 = 21.4
 ## => \mu* = 11,  \sigma* = 1.4
+## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
 generation_interval <- list(
   mean = log(11),
   mean_sd = 0,
@@ -171,6 +172,7 @@ generation_interval <- list(
 ## interpreted as log-normally distributed with 2/3 contained between 6 and 13:
 ## => \mu*/\sigma* = 6; \mu^* * \sigma* = 13
 ## => \mu* = 9, \sigma* = 1.5,  max = 21
+## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
 ## also adding a small amount of uncertainty
 incubation_period <- list(
   mean = log(9),

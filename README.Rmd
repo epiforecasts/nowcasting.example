@@ -1,0 +1,45 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# Nowcasting example
+
+## Installation
+
+You can install the utility functions contained in this repo with
+
+```{r install, eval = FALSE}
+# install.packages("devtools")
+devtools::install_github("epiforecasts/nowcasting.example")
+```
+
+## Render report
+
+To render the report, run
+
+```{r render, eval = FALSE}
+rmarkdown::render("inst/reports/est_trunc_epinow2.Rmd")
+```
+
+Afterwards the report can be viewed in `inst/reports/est_trunc_epinow2.html`.
+
+## Create mock dataset
+
+A mock dataset can be created using
+
+```{r data, eval = FALSE}
+source("inst/scripts/create_mock_dataset.r")
+```
+
+

@@ -1,0 +1,13 @@
+Package: nowcasting.example
+Version: 0.0.9000
+Depends:
+  dplyr,
+  purrr,
+  here
+Suggests:
+  EpiNow2,
+  rstan,
+  posterior,
+  tidyr,
+  fitdistrplus
+RoxygenNote: 7.2.0

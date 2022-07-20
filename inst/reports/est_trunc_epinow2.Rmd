@@ -1,18 +1,18 @@
 ---
-title: Estimating reporting delays with EpiNow2
+title: Estimating reporting delays and nowcasting/forecasting infections with EpiNow2
 ---
 
 # Load required libraries
 
 ```{r init}
-library("EpiNow2")
-library("mpx.nowcasting") ## devtools::install()
-library("dplyr")
-library("ggplot2")
-library("rstan")
-library("posterior")
-library("tidyr")
-library("fitdistrplus")
+suppressPackageStartupMessages(library("EpiNow2"))
+suppressPackageStartupMessages(library("mpx.nowcasting")) ## devtools::install()
+suppressPackageStartupMessages(library("dplyr"))
+suppressPackageStartupMessages(library("ggplot2"))
+suppressPackageStartupMessages(library("rstan"))
+suppressPackageStartupMessages(library("posterior"))
+suppressPackageStartupMessages(library("tidyr"))
+suppressPackageStartupMessages(library("fitdistrplus"))
 ```
 # Load the data
 
@@ -29,7 +29,7 @@ ggplot(df, aes(x = delay)) +
   theme_bw()
 ```
 
-There are negative delays (report before onset) - presumably representing either data entry errors or positive tests during the incubation period so hard to characterise as part of the reporting delay distribution.
+There are negative delays (report before onset) - possibly representing either data entry errors or positive tests during the incubation period so hard to characterise as part of the reporting delay distribution.
 
 ```{r negative_delays}
 df |>
@@ -138,4 +138,61 @@ ggplot(combined, aes(x = delay, y = cdf, linetype = Method)) +
     alpha = 0.25
   ) +
   theme_bw()
+```
+
+# Nowcast
+
+```{r estimate_infections}
+## create a data set of reported cases
+## (would be better to use onsets but missing data are an issue)
+reported_cases <- df |>
+  count(report_date, name = "confirm") |>
+  rename(date = report_date)
+
+## generation interval
+## from: https://www.gov.uk/government/publications/monkeypox-outbreak-technical-briefings/investigation-into-monkeypox-outbreak-in-england-technical-briefing-1
+## Preliminary estimate of the serial interval is 9.8 days though with high uncertainty (95% credible interval, 5.9 to 21.4).
+## It is unclear whether this refers to the estimate of the mean, or the spread of serial intervals
+## It is also unclear whether this is growth-adjusted
+## interpreted as log-normally distributed with 95% contained between 5.9 and 21.4:
+## => \mu*/\sigma*^2 = 5.9; \mu* * \sigma*^2 = 21.4
+## => \mu* = 11,  \sigma* = 1.4
+generation_interval <- list(
+  mean = log(11),
+  mean_sd = 0,
+  sd = log(1.4),
+  sd_sd = 0,
+  max = 25
+)
+
+## incubation period
+## from: https://www.who.int/news-room/fact-sheets/detail/monkeypox
+## "usually from 6 to 13 days but can range from 5 to 21"
+## interpreted as log-normally distributed with 2/3 contained between 6 and 13:
+## => \mu*/\sigma* = 6; \mu^* * \sigma* = 13
+## => \mu* = 9, \sigma* = 1.5,  max = 21
+## also adding a small amount of uncertainty
+incubation_period <- list(
+  mean = log(9),
+  mean_sd = 0.1,
+  sd = log(1.5),
+  sd_sd = 0.1,
+  max = 21
+)
+
+delays <- delay_opts(
+  ## incubation period
+  incubation_period,
+  ## reporting delay
+  est$dist
+)
+
+inf <- estimate_infections(
+  reported_cases = reported_cases,
+  generation_time = generation_interval,
+  delays = delays,
+  verbose = FALSE
+)
+
+plot(inf)
 ```

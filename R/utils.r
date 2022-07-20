@@ -6,8 +6,9 @@
 ##' @importFrom here here
 ##' @importFrom dplyr mutate
 ##' @author Sebastian Funk
+##' @export
 load_data <- function() {
-  df <- readRDS(here::here("data", "linelist_sf.rds")) |>
+  df <- readRDS(here::here("data", "linelist.rds")) |>
     dplyr::mutate(delay = as.integer(report_date - date_onset))
   return(df)
 }
@@ -23,6 +24,7 @@ load_data <- function() {
 ##' @importFrom dplyr arrange count pull rename filter
 ##' @importFrom tidyr complete
 ##' @author Sebastian Funk
+##' @export
 create_snapshots <- function(x, max_delay) {
   ## remove NA and sort
   x <- x |>

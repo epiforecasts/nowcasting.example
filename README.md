@@ -22,8 +22,8 @@ rmarkdown::render("inst/reports/est_trunc_epinow2.Rmd")
 
 Afterwards the report can be viewed in
 `inst/reports/est_trunc_epinow2.html`. A rendered version of the report
-is also available in
-[inst/reports/est_trunc_epinow2.md](the%20repository).
+is also available in [the
+repository](inst/reports/est_trunc_epinow2.md).
 
 ## Create mock dataset
 

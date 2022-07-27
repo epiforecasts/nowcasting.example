@@ -6,7 +6,7 @@ title: Estimating reporting delays and nowcasting/forecasting infections with Ep
 
 ```{r init}
 suppressPackageStartupMessages(library("EpiNow2"))
-suppressPackageStartupMessages(library("mpx.nowcasting")) ## devtools::install()
+suppressPackageStartupMessages(library("nowcasting.example")) ## devtools::install()
 suppressPackageStartupMessages(library("dplyr"))
 suppressPackageStartupMessages(library("ggplot2"))
 suppressPackageStartupMessages(library("rstan"))

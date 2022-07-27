@@ -6,7 +6,7 @@ EpiNow2
 
 ``` r
 suppressPackageStartupMessages(library("EpiNow2"))
-suppressPackageStartupMessages(library("mpx.nowcasting")) ## devtools::install()
+suppressPackageStartupMessages(library("nowcasting.example")) ## devtools::install()
 suppressPackageStartupMessages(library("dplyr"))
 suppressPackageStartupMessages(library("ggplot2"))
 suppressPackageStartupMessages(library("rstan"))
@@ -75,16 +75,16 @@ est$dist
 ```
 
     ## $mean
-    ## [1] 2.136
+    ## [1] 2.139
     ## 
     ## $mean_sd
-    ## [1] 0.038
+    ## [1] 0.041
     ## 
     ## $sd
-    ## [1] 0.505
+    ## [1] 0.507
     ## 
     ## $sd_sd
-    ## [1] 0.037
+    ## [1] 0.039
     ## 
     ## $max
     ## [1] 23
@@ -125,7 +125,7 @@ mean
     ## # A tibble: 1 × 3
     ##     est lower upper
     ##   <dbl> <dbl> <dbl>
-    ## 1  9.65  9.11  10.2
+    ## 1  9.66  9.08  10.3
 
 # Comparison to simpler approaches
 
@@ -203,14 +203,13 @@ reported_cases <- df |>
 ## Preliminary estimate of the serial interval is 9.8 days though with high uncertainty (95% credible interval, 5.9 to 21.4).
 ## It is unclear whether this refers to the estimate of the mean, or the spread of serial intervals
 ## It is also unclear whether this is growth-adjusted
-## interpreted as log-normally distributed with 95% contained between 5.9 and 21.4:
-## => \mu*/\sigma*^2 = 5.9; \mu* * \sigma*^2 = 21.4
-## => \mu* = 11,  \sigma* = 1.4
+## interpreted as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
+## with sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
 ## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
 generation_interval <- list(
-  mean = log(11),
+  mean = 13.65,
   mean_sd = 0,
-  sd = log(1.4),
+  sd = 3.7,
   sd_sd = 0,
   max = 25
 )
@@ -244,15 +243,7 @@ inf <- estimate_infections(
   delays = delays,
   verbose = FALSE
 )
-```
 
-    ## Warning: There were 9 divergent transitions after warmup. See
-    ## https://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup
-    ## to find out why this is a problem and how to eliminate them.
-
-    ## Warning: Examine the pairs() plot to diagnose sampling problems
-
-``` r
 plot(inf)
 ```
 

@@ -158,7 +158,7 @@ reported_cases <- df |>
 ## with sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
 ## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
 generation_interval <- list(
-  mean = 13.65
+  mean = 13.65,
   mean_sd = 0,
   sd = 3.7,
   sd_sd = 0,

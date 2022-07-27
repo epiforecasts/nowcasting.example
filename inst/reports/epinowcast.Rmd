@@ -1,0 +1,321 @@
+---
+title: Estimating reporting delays and nowcasting/forecasting infections with epinowcast
+---
+
+# Summary
+
+In this report we will make use of `epinowcast` an in development nowcasting package designed from the ground up around nowcating and aiming to replace `EpiNow2` for real-time usage. We will first nowcast a retrospective set of eample data to demonstrate the performance of the package before nowcasting the latest data and estimating an effective reproduction number estimate using `EpiNow2` and our nowcast.
+
+ For more on `epinowcast` see [the package documentation](https://epiforecasts.io/epinowcast/). Note that the package is stable and in regulary use but still in development. More features, including modelling missing data and estimating effective reproduction number with additional delays will be added in the near future. If these features are of interest to you in the short term please reach out. 
+
+# Load required libraries
+
+```{r init}
+suppressPackageStartupMessages(library("epinowcast"))
+suppressPackageStartupMessages(library("EpiNow2"))
+suppressPackageStartupMessages(library("nowcasting.example")) ## devtools::install()
+suppressPackageStartupMessages(library("dplyr"))
+suppressPackageStartupMessages(library("ggplot2"))
+suppressPackageStartupMessages(library("rstan"))
+suppressPackageStartupMessages(library("posterior"))
+suppressPackageStartupMessages(library("tidyr"))
+suppressPackageStartupMessages(library("fitdistrplus"))
+```
+# Load the data
+
+```{r load_data}
+df <- load_data()
+max_delay <- max(df$delay, na.rm = TRUE)
+glimpse(df)
+```
+
+# Data exploration
+
+```{r plot_data}
+ggplot(df, aes(x = delay)) +
+  geom_histogram(binwidth = 1) +
+  theme_bw()
+```
+
+There are negative delays (report before onset) - possibly representing either data entry errors or positive tests during the incubation period so hard to characterise as part of the reporting delay distribution.
+
+```{r negative_delays}
+df |>
+  filter(delay < 0)
+```
+
+There is also a significant excess at delay 0, which does not connect smoothly to the rest of the distribution and therefore seems to represent a separate process.
+
+# Preprocessiing the data with epinowcast
+
+Before we can estimate the reporting delay for onsets or nowcast unreporteed onsets we need to preprocess the data into a format `epinowcast` can make use of. We first need to restrict to delays greater than 0 due to the evidence for two reporting processes (note this limitation will be removed in futuure versions of `epinowcast) and aggregate data into the cumulative count format `epinowcast` expects. Note that `epinowcast` defines the target date (here the onset date) as the `reference_date`. Streamlining converting data into an appropriate format is an area of future development.
+
+```{r preprocess}
+count_df <- df |>
+  filter(delay > 0 | is.na(delay)) |>
+  rename(reference_date = date_onset) |>
+  count(reference_date, report_date, name = "confirm") |>
+  arrange(reference_date, report_date) |>
+  group_by(reference_date) |>
+  mutate(cum_confirm = cumsum(confirm)) |>
+  ungroup() |>
+  mutate(confirm = ifelse(!is.na(reference_date), cum_confirm, confirm)) |>
+  dplyr::select(-cum_confirm)
+glimpse(count_df)
+```
+
+We can now use preprocessing functions from `epinowcast` to complete all combinations of report and reference dates, prepare for modelling, and produce a range of useful summary datasets. Note that `epinowcast` returns output as `data.table` but users can make use of whatever data manipulation tools they are most comformfortable with. We first make sure all date combinations are present and then use a wrapper, `enw_preprocess_data()` to complete the rest of the required preprocessing steps. We set the maximum delay using the largest observed delay, though users should consider this with care as large outliers may impact this significantly.
+
+```{r epinowcast-preprocess}
+complete_df <- count_df |>
+  enw_complete_dates()
+glimpse(complete_df)
+
+enw_df <- complete_df |>
+  enw_preprocess_data(max_delay = max_delay)
+enw_df
+```
+
+Our output contains several useful measures including the maximum date of data, the maximum delay, the number of days included in the dataset, and the number of groups (here only one but this feature allows us to nowcast over stratifications such as age or location or a combination).
+
+To start with we may want to plot the latest available data alongside some previous updates (blue bars increasingly pale as it gets newer) and the data by date of report (grey bars)
+
+```{r latest-data}
+complete_df |>
+  filter(
+    report_date %in% as.Date(c("2020-03-15", "2020-04-01", "2020-04-15")) |
+    report_date == max(report_date)
+  ) |>
+  mutate(report_date = factor(report_date) |>
+    forcats::fct_rev()
+  ) |>
+  ggplot() +
+  aes(
+    x = reference_date, y = confirm, fill = report_date, group = report_date
+  ) +
+  geom_col(
+    data = enw_df$new_confirm[[1]] |>
+      group_by(report_date) |>
+      summarise(confirm = sum(new_confirm)),
+    fill = "lightgrey", alpha = 0.8,
+    aes(x = report_date)
+  ) +
+  geom_col(position = "identity", alpha = 0.7, col = "lightgrey") +
+  geom_vline(
+    aes(xintercept = as.Date(report_date)), linetype = 2, alpha = 0.9
+  ) +
+  scale_y_continuous(labels = ~ scales::comma(.x, accuracy = 1)) +
+  scale_fill_brewer(palette = "Blues") +
+  theme_bw() +
+  labs(
+    x = "Date of onset", y = "Reported cases with onset", fill = "Report date"
+  ) +
+  theme(legend.position = "bottom")
+```
+In this example the number/proportion of cases missing onsets may be of particular interest (note modelling of this data is currently in development for `epinowcast`).
+
+```{r missing-data}
+enw_df$missing_reference[[1]] |>
+  as_tibble() |>
+  filter(report_date >= "2020-03-11") |>
+  ggplot() +
+  aes(x = report_date, y = prop_missing) +
+  geom_col(fill = "lightblue") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  labs(x = "Report date of onsets", y = "Proportion of cases missing onsets")
+```
+
+# Nowcasting
+
+We use a relative simple model that assumes a Negative binomial observation process and a parametric log-normal reporting distribution. We also include a a random effect on the day of the week that onsets are reported to account for potentially variation due to the working weeek etc. 
+
+As a first step we need to compile the `epinowcast` model, we do this with `threads = TRUE` in order to support multi-threading to speed up estimation. We also define our fitting options (note these are passed to `cmdstanr` which is the backend tool we use for model fitting).
+
+```{r fit-opts}
+model <- enw_model(threads = TRUE)
+
+fit_opts <- enw_fit_opts(
+    chains = 2, parallel_chains = 2, threads_per_chain = 2,
+    iter_sampling = 1000, iter_warmup = 1000,
+    show_messages = FALSE, pp = TRUE
+)
+```
+
+We can then fit our nowcasting model. If interested in what each component is doing the output can be inspected interactively (for example the output of `enw_obs(family = "poisson", data = enw_df)` is data preprocessed into the format required for modelling).
+
+```{r simple-epinowcast}
+simple_nowcast <- epinowcast(
+  reference = enw_reference(
+    ~ rw(week), distribution = "lognormal", data = enw_df
+  ),
+  report = enw_report(~ (1 | day_of_week), data = enw_df),
+  obs = enw_obs(family = "negbin", data = enw_df),
+  data = enw_df, model = model, fit = fit_opts,
+)
+```
+
+The first thing we might want to do is look at the summarised nowcast for the last week.
+
+```{r summarised-simple-nowcast}
+simple_nowcast |>
+  summary(probs = c(0.05, 0.95)) |>
+  tail(n = 7)
+```
+
+We can also plot this nowcast against the latest data.
+
+```{r plot-simple-nowcast}
+simple_nowcast |>
+  plot()
+```
+
+In order to inspect how our model is doing we might also want to plot observations against posterior predictions.
+
+```{r plot-posterior-predictions, fig.height = 16, fig.width = 16}
+simple_nowcast |>
+  plot(type = "posterior") +
+  facet_wrap(vars(reference_date), scale = "free")
+```
+
+# Mean delay
+
+```{r pmf}
+## Extract probability mass function
+
+cmf <- rstan::extract(est$fit, "cmf")[[1]]
+colnames(cmf) <- seq(max_delay, 1, by = -1) 
+pmf <- as_draws_df(cmf) |>
+  pivot_longer(c(-.chain, -.iteration, -.draw),
+                      names_to = "delay") |>
+  mutate(delay = as.integer(delay)) |>
+  arrange(delay) |>
+  group_by(.iteration, .chain, .draw) |>
+  mutate(value = diff(c(0, value)))
+
+## Calculate per-sample mean
+mean <- pmf |>
+  group_by(.chain, .iteration, .draw) |>
+  summarise(mean = sum(delay * value), .groups = "drop") |>
+  summarise(
+    est = mean(mean),
+    lower = quantile(mean, 0.025),
+    upper = quantile(mean, 0.975)
+  )
+
+## Estimate + 95% CI of mean reporting delay
+mean
+```
+
+# Comparison to simpler approaches
+
+## Empirical delay
+
+```{r empirical}
+x <- 1:26
+emp <- ecdf(positive_df$delay)
+emp_cdf <- data.frame(
+  delay = x,
+  cdf = emp(x),
+  Method = "empirical"
+)
+```
+
+## Discretised lognormal fitted directly
+
+```{r dislnorm}
+ddislnorm <- function(x, meanlog, sdlog) {
+  return(plnorm(x, meanlog, sdlog) - plnorm(x - 1, meanlog, sdlog))
+}
+pdislnorm <- plnorm
+qdislnorm <- qlnorm
+
+y <- fitdist(
+  positive_df$delay,
+  "dislnorm",
+  start = list(meanlog = 0, sdlog = 1)
+)
+ln <- pdislnorm(1:26, y$estimate[1], y$estimate[2])
+ln_cdf <- data.frame(delay = x, cdf = ln, Method = "direct")
+
+epinow_cdf <- est$cmf |>
+  rename(delay = index, cdf = mean) |>
+  mutate(Method = "EpiNow2")
+```
+
+## Comparison
+
+```{r compare}
+combined <- bind_rows(
+  emp_cdf,
+  ln_cdf,
+  epinow_cdf
+)
+
+ggplot(combined, aes(x = delay, y = cdf, linetype = Method)) +
+  geom_line() +
+  geom_ribbon(
+    mapping = aes(ymin = lower_90, ymax = upper_90),
+    alpha = 0.25
+  ) +
+  theme_bw()
+```
+
+# Nowcast
+
+```{r estimate_infections}
+## create a data set of reported cases
+## (would be better to use onsets but missing data are an issue)
+reported_cases <- df |>
+  count(report_date, name = "confirm") |>
+  rename(date = report_date)
+
+## generation interval
+## from: https://www.gov.uk/government/publications/monkeypox-outbreak-technical-briefings/investigation-into-monkeypox-outbreak-in-england-technical-briefing-1
+## Preliminary estimate of the serial interval is 9.8 days though with high uncertainty (95% credible interval, 5.9 to 21.4).
+## It is unclear whether this refers to the estimate of the mean, or the spread of serial intervals
+## It is also unclear whether this is growth-adjusted
+## interpreted as log-normally distributed with 95% contained between 5.9 and 21.4:
+## => \mu*/\sigma*^2 = 5.9; \mu* * \sigma*^2 = 21.4
+## => \mu* = 11,  \sigma* = 1.4
+## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
+generation_interval <- list(
+  mean = log(11),
+  mean_sd = 0,
+  sd = log(1.4),
+  sd_sd = 0,
+  max = 25
+)
+
+## incubation period
+## from: https://www.who.int/news-room/fact-sheets/detail/monkeypox
+## "usually from 6 to 13 days but can range from 5 to 21"
+## interpreted as log-normally distributed with 2/3 contained between 6 and 13:
+## => \mu*/\sigma* = 6; \mu^* * \sigma* = 13
+## => \mu* = 9, \sigma* = 1.5,  max = 21
+## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
+## also adding a small amount of uncertainty
+incubation_period <- list(
+  mean = log(9),
+  mean_sd = 0.1,
+  sd = log(1.5),
+  sd_sd = 0.1,
+  max = 21
+)
+
+delays <- delay_opts(
+  ## incubation period
+  incubation_period,
+  ## reporting delay
+  est$dist
+)
+
+inf <- estimate_infections(
+  reported_cases = reported_cases,
+  generation_time = generation_interval,
+  delays = delays,
+  verbose = FALSE
+)
+
+plot(inf)
+```

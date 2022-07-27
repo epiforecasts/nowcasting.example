@@ -6,8 +6,11 @@ Depends:
   here
 Suggests:
   EpiNow2,
+  epinowcast,
   rstan,
   posterior,
   tidyr,
   fitdistrplus
+Remotes:
+  epiforecasts/epinowcast@develop
 RoxygenNote: 7.2.0

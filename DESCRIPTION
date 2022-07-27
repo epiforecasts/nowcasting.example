@@ -10,4 +10,6 @@ Suggests:
   posterior,
   tidyr,
   fitdistrplus
+Remotes:
+  epiforecasts/EpiNow2
 RoxygenNote: 7.2.0

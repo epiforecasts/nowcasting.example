@@ -12,7 +12,7 @@ You can install the utility functions contained in this repo with
 devtools::install_github("epiforecasts/nowcasting.example")
 ```
 
-## Render report
+## Render report the `EpiNow2` report
 
 To render the report, run
 
@@ -24,6 +24,19 @@ Afterwards the report can be viewed in
 `inst/reports/est_trunc_epinow2.html`. A rendered version of the report
 is also available in [the
 repository](inst/reports/est_trunc_epinow2.md).
+
+## Render report the `epinowcast` report
+
+To render the report, run
+
+``` r
+rmarkdown::render("inst/reports/epinowcast.Rmd")
+```
+
+Afterwards the report can be viewed in
+`inst/reports/epinowcast.html`. A rendered version of the report
+is also available in [the
+repository](inst/reports/epinowcast.md).
 
 ## Create mock dataset
 

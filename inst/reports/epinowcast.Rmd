@@ -18,6 +18,7 @@ suppressPackageStartupMessages(library("rstan"))
 suppressPackageStartupMessages(library("posterior"))
 suppressPackageStartupMessages(library("tidyr"))
 suppressPackageStartupMessages(library("fitdistrplus"))
+suppressPackageStartupMessages(library("purrr"))
 ```
 # Load the data
 
@@ -68,11 +69,11 @@ We can now use preprocessing functions from `epinowcast` to complete all combina
 
 ```{r epinowcast-preprocess}
 complete_df <- count_df |>
-  enw_complete_dates()
+  enw_complete_dates(max_delay = max_delay + 5)
 glimpse(complete_df)
 
 enw_df <- complete_df |>
-  enw_preprocess_data(max_delay = max_delay)
+  enw_preprocess_data(max_delay = max_delay + 5)
 enw_df
 ```
 
@@ -147,7 +148,7 @@ We can then fit our nowcasting model. If interested in what each component is do
 
 ```{r simple-epinowcast}
 simple_nowcast <- epinowcast(
-  obs = enw_obs(family = "negbin", data = enw_df),
+  obs = enw_obs(family = "poisson", data = enw_df),
   data = enw_df, model = model, fit = fit_opts,
 )
 ```
@@ -164,16 +165,13 @@ We can also plot this nowcast against the latest data.
 
 ```{r plot-simple-nowcast}
 simple_nowcast |>
-  plot()
+  plot() +
+  labs(x = "Onset date", y = "Reported cases by onset date")
 ```
 
-In order to inspect how our model is doing we might also want to plot observations against posterior predictions summarised by the delay from onset to report.
+In order to inspect how our model is doing we might also want to plot observations against posterior predictions summarised by the delay from onset to report. Here columns are the observed data. The dashed line is the median of summarised predictions and the ribbons are the 60% and 80% scredible intervals. Note these are estimated by adding individual prediction quantiles and so likely over estimate uncertainty.
 
 ```{r plot-posterior-predictions}
-#| fig-cap: The solid line with points is the observed data. The dashed line is
-#| the median of summarised predictions and the ribbons are the 60% and 80%
-#| credible intervals. Note these are estimated by adding individual prediction
-#| quantiles and so likely over estimate uncertainty.
 summary(simple_nowcast, type = "posterior_prediction") |>
   group_by(delay) |>
   summarise(
@@ -190,7 +188,14 @@ summary(simple_nowcast, type = "posterior_prediction") |>
   labs(x = "Days since onset", y = "Reported cases with onset")
 ```
 
-In real-world data we might expect to see time-varying delays in reporting, overdispersed reporting, and the likelihood of reporting varying by report date (i.e due to the day fo the week ec.). All of these complexities can be modelled using `epinowcast 0.1.0`.
+Finally, we can also look at the posterior estimates for the parametric delay distribution (remembering that a logmean of 2 and a logsd of 0.5 was used to generate the simulated data). Here `refp_mean` denotes the logmean and `refp_sd` denotes the log standard deviation. We see our estimates are close to those from the data generating process though don't cover them at the 90% credible interval. This may be driven by bias in the generating process, (as 0 delays are excluded), by our use of a truncated distribution truncated by the maximum delay, inherent loss/lack of information, or from our inference technique.
+
+```{r}
+simple_nowcast |>
+  summary(type = "fit", variables = c("refp_mean", "refp_sd"))
+```
+
+In real-world data we might expect to see delays drawn from different distributions or no apparent distribution, time-varying delays in reporting, overdispersed reporting, and the likelihood of reporting varying by report date (i.e due to the day of the week etc.). All of these complexities can be modelled using `epinowcast 0.1.0`.
 
 As we saw in our data we also have negative delays, overinflated counts with zero delays, reported cases missing onsets and a clear day of the week effect in the underlying simulated data. Modelling all of these features, rather than exluding them or ignoring them, would likely reduce bias. These features, exluding negative delays, are on the roadmap for `epinowcast 0.2.0` please reach out if they would be of use to you. Negative delays are potentially the most complex modelling issue as they are technically not possible if we define a reporting date to be later than or equal to the reference date, which is how many nowcasting models work. We instead need to a generative process that leads to both of these observations. Doing this is planned for a future version of `epinowcast` but not currently in the roadmap again reach out if this is key to your use case.
 
@@ -218,51 +223,29 @@ retro_nowcast <- retro_df |>
   ))()
 ```
 
-We now plot this retrospective nowcast against the latest available data (noting that some of the more recently reported data may not be fully complete yet). Here we see our approach is doing relatively well at capturing the lastest available obserservations (triangles) using the data available at the time (circles) though perhaps is a little more uncertain than we might ideally like. 
+We now plot this retrospective nowcast against the latest available data (noting that some of the more recently reported data may not be fully complete yet). Here we see our approach is doing relatively well at capturing the lastest available obserservations (triangles) using the data available at the time (circles) though perhaps is a little more uncertain than we might ideally like.
 
 ```{r plot-retro-nowcast}
-plot(retro_nowcast, latest_retro_obs)
-```
-# Mean delay
-
-```{r pmf}
-## Extract probability mass function
-
-cmf <- rstan::extract(est$fit, "cmf")[[1]]
-colnames(cmf) <- seq(max_delay, 1, by = -1) 
-pmf <- as_draws_df(cmf) |>
-  pivot_longer(c(-.chain, -.iteration, -.draw),
-                      names_to = "delay") |>
-  mutate(delay = as.integer(delay)) |>
-  arrange(delay) |>
-  group_by(.iteration, .chain, .draw) |>
-  mutate(value = diff(c(0, value)))
-
-## Calculate per-sample mean
-mean <- pmf |>
-  group_by(.chain, .iteration, .draw) |>
-  summarise(mean = sum(delay * value), .groups = "drop") |>
-  summarise(
-    est = mean(mean),
-    lower = quantile(mean, 0.025),
-    upper = quantile(mean, 0.975)
-  )
-
-## Estimate + 95% CI of mean reporting delay
-mean
+plot(retro_nowcast, latest_retro_obs) +
+  labs(x = "Onset date", y = "Reported cases by onset date")
 ```
 
 # Comparison to simpler approaches
 
+As for our `EpiNow2` comparison here we compare the etimated delay distribution from epinowcast with empirical estimates, estimates from simpler methods, and the known distribution used when simulating the data.
+
 ## Empirical delay
 
 ```{r empirical}
+positive_df <- df |>
+  filter(delay > 0)
+
 x <- 1:26
 emp <- ecdf(positive_df$delay)
 emp_cdf <- data.frame(
   delay = x,
   cdf = emp(x),
-  Method = "empirical"
+  Method = "Empirical"
 )
 ```
 
@@ -281,20 +264,49 @@ y <- fitdist(
   start = list(meanlog = 0, sdlog = 1)
 )
 ln <- pdislnorm(1:26, y$estimate[1], y$estimate[2])
-ln_cdf <- data.frame(delay = x, cdf = ln, Method = "direct")
+ln_cdf <- data.frame(delay = x, cdf = ln, Method = "Direct")
+```
 
-epinow_cdf <- est$cmf |>
-  rename(delay = index, cdf = mean) |>
-  mutate(Method = "EpiNow2")
+## Extract the lognormal CMF from `epinowcast`
+
+```{r}
+extract_epinowcast_cmf <- function(nowcast) {
+  nowcast |>
+  (\(x) x$fit[[1]]$draws(variables = c("refp_mean", "refp_sd")))() |>
+  as_draws_df() |>
+  mutate(pmf = purrr::map2(
+    `refp_mean[1]`, `refp_sd[1]`,
+    ~ data.frame(
+      delay = 1:26, pmf = pdislnorm(1:26, .x, .y)
+    ))
+  ) |>
+  unnest(pmf) |>
+  group_by(delay) |>
+  summarise(
+    pmf = mean(pmf), lower_90 = quantile(pmf, 0.05),
+    upper_90 = quantile(pmf, 0.95)
+  )
+}
+
+epinowcast_cdf <- list(
+  "epinowcast (real-time)" = simple_nowcast,
+  "epinowcast (retrospective)" = retro_nowcast
+) |>
+  map_df(extract_epinowcast_cmf, .id = "Method")
 ```
 
 ## Comparison
 
 ```{r compare}
+true_cdf <- data.frame(
+  delay = 1:26, pmf = pdislnorm(1:26, 2, 0.5), method = "Data generating"
+)
+
 combined <- bind_rows(
+  true_cdf,
   emp_cdf,
   ln_cdf,
-  epinow_cdf
+  epinowcast_cdf
 )
 
 ggplot(combined, aes(x = delay, y = cdf, linetype = Method)) +
@@ -308,7 +320,7 @@ ggplot(combined, aes(x = delay, y = cdf, linetype = Method)) +
 
 # Nowcast
 
-```{r estimate_infections}
+```{r estimate_infections, eval = FALSE}
 ## create a data set of reported cases
 ## (would be better to use onsets but missing data are an issue)
 reported_cases <- df |>

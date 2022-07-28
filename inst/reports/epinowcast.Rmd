@@ -198,7 +198,31 @@ As we saw in our data we also have negative delays, overinflated counts with zer
 
 In order to understand how well our nowcasting method is working in real-time it can be useful to have an understanding on how well it did on past data that is know up to date, or more up to date. Here we conduct another nowcast, in the same way as above but on a reconstructed version of what we think the data available on the 1st of April 2020 would have looked like. The first step is to construct this retrospective data and to extract what the latest data looks like for this time period.
 
+```{r make-retro-df}
+retro_df <- complete_df |>
+ enw_filter_report_dates(latest_date = "2020-04-01")
 
+latest_retro_obs <- complete_df |>
+  enw_latest_data()
+tail(latest_retro_obs, n = 5)
+```
+
+We can now preprocess the data as before and fit the same nowcasting model.
+
+```{r retro_nowcast}
+retro_nowcast <- retro_df |>
+  enw_preprocess_data(max_delay = max_delay) |>
+  (\(x) epinowcast(
+    obs = enw_obs(family = "negbin", data = x),
+    data = x, model = model, fit = fit_opts,
+  ))()
+```
+
+We now plot this retrospective nowcast against the latest available data (noting that some of the more recently reported data may not be fully complete yet). Here we see our approach is doing relatively well at capturing the lastest available obserservations (triangles) using the data available at the time (circles) though perhaps is a little more uncertain than we might ideally like. 
+
+```{r plot-retro-nowcast}
+plot(retro_nowcast, latest_retro_obs)
+```
 # Mean delay
 
 ```{r pmf}

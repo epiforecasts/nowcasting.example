@@ -10,7 +10,8 @@ Suggests:
   rstan,
   posterior,
   tidyr,
-  fitdistrplus
+  fitdistrplus,
+  forcats
 Remotes:
   epiforecasts/epinowcast@develop
 RoxygenNote: 7.2.0

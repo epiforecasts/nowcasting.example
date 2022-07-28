@@ -147,7 +147,7 @@ We can then fit our nowcasting model. If interested in what each component is do
 
 ```{r simple-epinowcast}
 simple_nowcast <- epinowcast(
-  obs = enw_obs(family = "poisson", data = enw_df),
+  obs = enw_obs(family = "negbin", data = enw_df),
   data = enw_df, model = model, fit = fit_opts,
 )
 ```
@@ -167,12 +167,27 @@ simple_nowcast |>
   plot()
 ```
 
-In order to inspect how our model is doing we might also want to plot observations against posterior predictions.
+In order to inspect how our model is doing we might also want to plot observations against posterior predictions summarised by the delay from onset to report.
 
-```{r plot-posterior-predictions, fig.height = 16, fig.width = 16}
-simple_nowcast |>
-  plot(type = "posterior") +
-  facet_wrap(vars(reference_date), scale = "free")
+```{r plot-posterior-predictions}
+#| fig-cap: The solid line with points is the observed data. The dashed line is
+#| the median of summarised predictions and the ribbons are the 60% and 80%
+#| credible intervals. Note these are estimated by adding individual prediction
+#| quantiles and so likely over estimate uncertainty.
+summary(simple_nowcast, type = "posterior_prediction") |>
+  group_by(delay) |>
+  summarise(
+    across(c(new_confirm, median, q5, q20, q80, q95), ~ sum(.x)),
+    .groups = "drop"
+  ) |>
+  ggplot() +
+  aes(x = delay, y = new_confirm) +
+  geom_col(col = "#d3d3d393") +
+  geom_line(aes(y = median), size = 1.5, linetype = 2, col = "lightblue") +
+  geom_ribbon(aes(ymin = q5, ymax = q95), alpha = 0.3, fill = "lightblue") +
+  geom_ribbon(aes(ymin = q20, ymax = q80), alpha = 0.3, fill = "lightblue") +
+  theme_bw() +
+  labs(x = "Days since onset", y = "Reported cases with onset")
 ```
 
 In real-world data we might expect to see time-varying delays in reporting, overdispersed reporting, and the likelihood of reporting varying by report date (i.e due to the day fo the week ec.). All of these complexities can be modelled using `epinowcast 0.1.0`.

@@ -81,15 +81,15 @@ count_df <- df |>
 glimpse(count_df)
 ```
 
-We can now use preprocessing functions from `epinowcast` to complete all combinations of report and reference dates, prepare for modelling, and produce a range of useful summary datasets. Note that `epinowcast` returns output as `data.table` but users can make use of whatever data manipulation tools they are most comfortable with. We first make sure all date combinations are present and then use a wrapper, `enw_preprocess_data()` to complete the rest of the required preprocessing steps. We set the maximum delay using the largest observed delay plus 5 days to account for the fact that observing no cases with a longer reporting delay is also data. In general users should consider setting the maximum delay with care as larger values require significantly increased compute whilst smaller values may insufficiently capture reporting distribution leading to bias.
+We can now use preprocessing functions from `epinowcast` to complete all combinations of report and reference dates, prepare for modelling, and produce a range of useful summary datasets. Note that `epinowcast` returns output as `data.table` but users can make use of whatever data manipulation tools they are most comfortable with. We first make sure all date combinations are present and then use a wrapper, `enw_preprocess_data()` to complete the rest of the required preprocessing steps. We set the maximum delay using the largest observed delay which assumes reporting after this point is not possible. In general, users should consider setting the maximum delay with care as larger values require significantly increased compute whilst smaller values may insufficiently capture reporting distributions leading to bias.
 
 ```{r epinowcast-preprocess}
 complete_df <- count_df |>
-  enw_complete_dates(max_delay = max_delay + 5)
+  enw_complete_dates(max_delay = max_delay)
 glimpse(complete_df)
 
 enw_df <- complete_df |>
-  enw_preprocess_data(max_delay = max_delay + 5)
+  enw_preprocess_data(max_delay = max_delay)
 enw_df
 ```
 
@@ -289,15 +289,16 @@ extract_epinowcast_cdf <- function(nowcast) {
   as_draws_df() |>
   mutate(cdf = purrr::map2(
     `refp_mean[1]`, `refp_sd[1]`,
-    ~ data.frame(
-      delay = 1:26, cdf = pdislnorm(1:26, .x, .y)
+    ~ tibble(
+      delay = 1:26, cdf = pdislnorm(1:26, .x, .y) /  pdislnorm(26, .x, .y)
     ))
   ) |>
   unnest(cdf) |>
   group_by(delay) |>
   summarise(
-    cdf = mean(cdf), lower_90 = quantile(cdf, 0.05),
-    upper_90 = quantile(cdf, 0.95)
+    cdf = mean(cdf),
+    lower_90 = quantile(cdf, probs = 0.05),
+    upper_90 = quantile(cdf, probs = 0.95)
   )
 }
 
@@ -316,7 +317,9 @@ We now compare the various approaches to estimate the reporting distribution aga
 
 ```{r compare}
 true_cdf <- data.frame(
-  delay = 1:26, cdf = pdislnorm(1:26, 2, 0.5), Method = "Data generating"
+  delay = 1:26,
+  cdf = pdislnorm(1:26, 2, 0.5) / pdislnorm(26, 2, 0.5),
+  Method = "Data generating"
 )
 
 combined <- bind_rows(
@@ -327,14 +330,17 @@ combined <- bind_rows(
 )
 
 ggplot(combined, aes(x = delay, y = cdf, col = Method, fill = Method)) +
-  geom_ribbon(aes(ymin = lower_90, ymax = upper_90), alpha = 0.25) +
-  geom_line(size = 1.2, alpha = 0.8) +
+  geom_line(size = 1.1, alpha = 0.7) +
+  geom_ribbon(
+    data = combined |>
+      filter(!is.na(lower_90)),
+    mapping = aes(ymin = lower_90, ymax = upper_90), alpha = 0.25
+  ) +
   theme_bw() +
   theme(legend.position = "bottom") +
   guides(
     fill = guide_legend(nrow = 2),
-    col = guide_legend(nrow = 2),
-    linetype = guide_legend(nrow = 2)
+    col = guide_legend(nrow = 2)
   ) +
   labs(
     x = "Delay between onset and case report",

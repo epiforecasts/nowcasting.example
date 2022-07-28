@@ -52,11 +52,11 @@ case study rerun to explore other reporting scenarios.
     df <- load_data()
     max_delay <- max(df$delay, na.rm = TRUE)
     glimpse(df)
-    #> Rows: 299
+    #> Rows: 311
     #> Columns: 3
-    #> $ date_onset  <date> 2020-03-02, 2020-03-04, 2020-03-06, 2020-03-06, 2020-03-07, 2020-…
-    #> $ report_date <date> 2020-03-10, 2020-03-04, 2020-03-12, 2020-03-06, 2020-03-07, 2020-…
-    #> $ delay       <int> 8, 0, 6, 0, 0, 16, -7, 20, 18, 0, 0, 6, 9, 14, 0, 10, 5, 4, 12, 5,…
+    #> $ date_onset  [3m[38;5;246m<date>[39m[23m 2020-02-29, 2020-02-29, NA, 2020…
+    #> $ report_date [3m[38;5;246m<date>[39m[23m 2020-03-18, 2020-03-05, 2020-03-…
+    #> $ delay       [3m[38;5;246m<int>[39m[23m 18, 5, NA, 7, 8, 4, 11, 0, NA, 0,…
 
 # Data exploration
 
@@ -79,9 +79,9 @@ distribution.
     #> # A tibble: 3 × 3
     #>   date_onset report_date delay
     #>   <date>     <date>      <int>
-    #> 1 2020-03-07 2020-02-29     -7
-    #> 2 2020-03-17 2020-03-13     -4
-    #> 3 2020-04-04 2020-03-30     -5
+    #> 1 2020-03-14 2020-03-05     -9
+    #> 2 2020-03-18 2020-03-08    -10
+    #> 3 2020-04-05 2020-03-31     -5
 
 There is also a significant excess at delay 0, which does not connect
 smoothly to the rest of the distribution and therefore seems to
@@ -108,11 +108,11 @@ the `reference_date`.
       mutate(confirm = ifelse(!is.na(reference_date), cum_confirm, confirm)) |>
       dplyr::select(-cum_confirm)
     glimpse(count_df)
-    #> Rows: 141
+    #> Rows: 152
     #> Columns: 3
-    #> $ reference_date <date> 2020-03-02, 2020-03-06, 2020-03-07, 2020-03-08, 2020-03-08, 20…
-    #> $ report_date    <date> 2020-03-10, 2020-03-12, 2020-03-23, 2020-03-14, 2020-03-17, 20…
-    #> $ confirm        <int> 1, 1, 1, 1, 2, 3, 4, 5, 1, 3, 4, 5, 1, 2, 1, 1, 2, 1, 1, 3, 4, …
+    #> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-…
+    #> $ report_date    <date> 2020-03-05, 2020-03-18, 2020-…
+    #> $ confirm        <int> 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, …
 
 We can now use preprocessing functions from `epinowcast` to complete all
 combinations of report and reference dates, prepare for modelling, and
@@ -122,30 +122,34 @@ manipulation tools they are most comfortable with. We first make sure
 all date combinations are present and then use a wrapper,
 `enw_preprocess_data()` to complete the rest of the required
 preprocessing steps. We set the maximum delay using the largest observed
-delay plus 5 days to account for the fact that observing no cases with a
-longer reporting delay is also data. In general users should consider
-setting the maximum delay with care as larger values require
-significantly increased compute whilst smaller values may insufficiently
-capture reporting distribution leading to bias.
+delay which assumes reporting after this point is not possible. In
+general, users should consider setting the maximum delay with care as
+larger values require significantly increased compute whilst smaller
+values may insufficiently capture reporting distributions leading to
+bias.
 
     complete_df <- count_df |>
-      enw_complete_dates(max_delay = max_delay + 5)
+      enw_complete_dates(max_delay = max_delay)
     glimpse(complete_df)
-    #> Rows: 1,052
+    #> Rows: 1,049
     #> Columns: 3
-    #> $ reference_date <date> 2020-03-02, 2020-03-02, 2020-03-02, 2020-03-02, 2020-03-02, 20…
-    #> $ report_date    <date> 2020-03-02, 2020-03-03, 2020-03-04, 2020-03-05, 2020-03-06, 20…
-    #> $ confirm        <int> 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, …
+    #> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-…
+    #> $ report_date    <date> 2020-02-29, 2020-03-01, 2020-…
+    #> $ confirm        <int> 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, …
 
     enw_df <- complete_df |>
-      enw_preprocess_data(max_delay = max_delay + 5)
+      enw_preprocess_data(max_delay = max_delay)
     enw_df
-    #>                     obs         new_confirm             latest  missing_reference
-    #> 1: <data.table[1026x7]> <data.table[975x9]> <data.table[51x8]> <data.table[51x4]>
-    #>     reporting_triangle      metareference          metareport          metadelay time
-    #> 1: <data.table[51x27]> <data.table[51x7]> <data.table[75x10]> <data.table[25x4]>   51
+    #>                     obs         new_confirm
+    #> 1: <data.table[1019x7]> <data.table[966x9]>
+    #>                latest  missing_reference
+    #> 1: <data.table[53x8]> <data.table[53x4]>
+    #>     reporting_triangle      metareference
+    #> 1: <data.table[53x25]> <data.table[53x7]>
+    #>             metareport          metadelay time
+    #> 1: <data.table[75x10]> <data.table[23x4]>   53
     #>    snapshots by groups max_delay   max_date
-    #> 1:        51         1        25 2020-04-21
+    #> 1:        53         1        23 2020-04-21
 
 Our output contains several useful measures including the maximum date
 of observations, the maximum delay, the number of days included in the
@@ -234,7 +238,7 @@ backend tool used in `epinowcast` for model fitting).
 
     fit_opts <- enw_fit_opts(
         chains = 2, parallel_chains = 2, threads_per_chain = 2,
-        iter_sampling = 1000, iter_warmup = 1000,
+        iter_sampling = 1000, iter_warmup = 1000, adapt_delta = 0.9,
         show_messages = FALSE, refresh = 0, pp = TRUE
     )
 
@@ -249,12 +253,12 @@ observations preprocessed into the format required for modelling).
     )
     #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
     #> 
-    #> Chain 2 finished in 28.5 seconds.
-    #> Chain 1 finished in 29.4 seconds.
+    #> Chain 1 finished in 28.3 seconds.
+    #> Chain 2 finished in 28.9 seconds.
     #> 
     #> Both chains finished successfully.
-    #> Mean chain execution time: 28.9 seconds.
-    #> Total execution time: 29.5 seconds.
+    #> Mean chain execution time: 28.6 seconds.
+    #> Total execution time: 29.0 seconds.
 
 The first thing we might want to do is look at the summarised nowcast
 for the last week.
@@ -265,14 +269,22 @@ for the last week.
         reference_date, report_date, delay, confirm, mean, median, sd, mad
       ) |>
       tail(n = 7)
-    #>    reference_date report_date delay confirm   mean median        sd    mad
-    #> 1:     2020-04-15  2020-04-21     6       1 3.8505      4  1.967253 1.4826
-    #> 2:     2020-04-16  2020-04-21     5       0 3.7790      3  2.665842 2.9652
-    #> 3:     2020-04-17  2020-04-21     4       2 7.5835      7  3.962560 2.9652
-    #> 4:     2020-04-18  2020-04-21     3       1 7.7315      6  5.478815 4.4478
-    #> 5:     2020-04-19  2020-04-21     2       0 7.3450      5  7.001463 4.4478
-    #> 6:     2020-04-20  2020-04-21     1       0 7.9975      6  8.816482 4.4478
-    #> 7:     2020-04-21  2020-04-21     0       0 8.4175      6 10.662459 5.9304
+    #>    reference_date report_date delay confirm   mean
+    #> 1:     2020-04-15  2020-04-21     6       0 2.1060
+    #> 2:     2020-04-16  2020-04-21     5       1 3.6190
+    #> 3:     2020-04-17  2020-04-21     4       1 4.0935
+    #> 4:     2020-04-18  2020-04-21     3       0 3.4575
+    #> 5:     2020-04-19  2020-04-21     2       0 3.6855
+    #> 6:     2020-04-20  2020-04-21     1       0 3.9230
+    #> 7:     2020-04-21  2020-04-21     0       0 4.0480
+    #>    median       sd    mad
+    #> 1:      2 1.698295 1.4826
+    #> 2:      3 1.957231 1.4826
+    #> 3:      4 2.231871 1.4826
+    #> 4:      3 2.573034 2.9652
+    #> 5:      3 3.015815 2.9652
+    #> 6:      3 3.297045 2.9652
+    #> 7:      3 3.792873 2.9652
 
 We can also plot this nowcast against the latest data.
 
@@ -295,9 +307,12 @@ information, or from biases introduced by our estimation method.
     simple_nowcast |>
       summary(type = "fit", variables = c("refp_mean", "refp_sd")) |>
       dplyr::select(variable, mean, median, sd, mad)
-    #>        variable      mean    median         sd        mad
-    #> 1: refp_mean[1] 2.1154413 2.1144800 0.04278913 0.04219480
-    #> 2:   refp_sd[1] 0.4349351 0.4316375 0.03078582 0.03197449
+    #>        variable      mean    median         sd
+    #> 1: refp_mean[1] 2.0916379 2.0906000 0.04112836
+    #> 2:   refp_sd[1] 0.4522812 0.4501565 0.03162388
+    #>           mad
+    #> 1: 0.03914064
+    #> 2: 0.03307829
 
 In real-world data we might expect to see delays drawn from different
 distributions or no apparent distribution, time-varying delays in
@@ -336,11 +351,11 @@ to extract what the latest data looks like for this time period.
       enw_filter_reference_dates(latest_date = "2020-04-01")
     tail(latest_retro_obs, n = 5)
     #>    reference_date report_date confirm
-    #> 1:     2020-03-28  2020-04-21       6
-    #> 2:     2020-03-29  2020-04-21       4
-    #> 3:     2020-03-30  2020-04-21       5
-    #> 4:     2020-03-31  2020-04-21       3
-    #> 5:     2020-04-01  2020-04-21       1
+    #> 1:     2020-03-28  2020-04-20       6
+    #> 2:     2020-03-29  2020-04-21      11
+    #> 3:     2020-03-30  2020-04-21       1
+    #> 4:     2020-03-31  2020-04-21       1
+    #> 5:     2020-04-01  2020-04-21       3
 
 We can now preprocess the data as before and fit the same nowcasting
 model. Note it is significantly faster to fit as less data is being
@@ -354,12 +369,12 @@ used.
       ))()
     #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
     #> 
-    #> Chain 2 finished in 13.8 seconds.
-    #> Chain 1 finished in 15.4 seconds.
+    #> Chain 2 finished in 15.2 seconds.
+    #> Chain 1 finished in 16.5 seconds.
     #> 
     #> Both chains finished successfully.
-    #> Mean chain execution time: 14.6 seconds.
-    #> Total execution time: 15.4 seconds.
+    #> Mean chain execution time: 15.9 seconds.
+    #> Total execution time: 16.6 seconds.
 
 We now plot this retrospective nowcast against the latest available data
 (noting that some of the more recently reported data may not be fully
@@ -399,14 +414,14 @@ timespan of our data, and the bias from truncation was small.
     )
 
     tail(emp_cdf, n = 7)
-    #>    delay cdf    Method
-    #> 20    20   1 Empirical
-    #> 21    21   1 Empirical
-    #> 22    22   1 Empirical
-    #> 23    23   1 Empirical
-    #> 24    24   1 Empirical
-    #> 25    25   1 Empirical
-    #> 26    26   1 Empirical
+    #>    delay       cdf    Method
+    #> 20    20 0.9935484 Empirical
+    #> 21    21 0.9935484 Empirical
+    #> 22    22 0.9935484 Empirical
+    #> 23    23 1.0000000 Empirical
+    #> 24    24 1.0000000 Empirical
+    #> 25    25 1.0000000 Empirical
+    #> 26    26 1.0000000 Empirical
 
 ## Discretised lognormal fitted directly
 
@@ -437,13 +452,13 @@ consider these approaches.
 
     tail(ln_cdf, n = 7)
     #>    delay       cdf Method
-    #> 20    20 0.9880595 Direct
-    #> 21    21 0.9908775 Direct
-    #> 22    22 0.9930036 Direct
-    #> 23    23 0.9946136 Direct
-    #> 24    24 0.9958373 Direct
-    #> 25    25 0.9967709 Direct
-    #> 26    26 0.9974858 Direct
+    #> 20    20 0.9864762 Direct
+    #> 21    21 0.9895167 Direct
+    #> 22    22 0.9918425 Direct
+    #> 23    23 0.9936282 Direct
+    #> 24    24 0.9950043 Direct
+    #> 25    25 0.9960687 Direct
+    #> 26    26 0.9968951 Direct
 
 ## Extract the lognormal CMF from `epinowcast`
 
@@ -458,15 +473,16 @@ code.
       as_draws_df() |>
       mutate(cdf = purrr::map2(
         `refp_mean[1]`, `refp_sd[1]`,
-        ~ data.frame(
-          delay = 1:26, cdf = pdislnorm(1:26, .x, .y)
+        ~ tibble(
+          delay = 1:26, cdf = pdislnorm(1:26, .x, .y) /  pdislnorm(26, .x, .y)
         ))
       ) |>
       unnest(cdf) |>
       group_by(delay) |>
       summarise(
-        cdf = mean(cdf), lower_90 = quantile(cdf, 0.05),
-        upper_90 = quantile(cdf, 0.95)
+        cdf = mean(cdf),
+        lower_90 = quantile(cdf, probs = 0.05),
+        upper_90 = quantile(cdf, probs = 0.95)
       )
     }
 
@@ -479,11 +495,11 @@ code.
     glimpse(epinowcast_cdf)
     #> Rows: 52
     #> Columns: 5
-    #> $ Method   <chr> "epinowcast (real-time)", "epinowcast (real-time)", "epinowcast (real…
-    #> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20…
-    #> $ cdf      <dbl> 1.661250e-06, 6.753623e-04, 1.029906e-02, 4.761341e-02, 1.229488e-01,…
-    #> $ lower_90 <dbl> 1.661250e-06, 6.753623e-04, 1.029906e-02, 4.761341e-02, 1.229488e-01,…
-    #> $ upper_90 <dbl> 1.661250e-06, 6.753623e-04, 1.029906e-02, 4.761341e-02, 1.229488e-01,…
+    #> $ Method   <chr> "epinowcast (real-time)", "epinowcas…
+    #> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1…
+    #> $ cdf      <dbl> 4.384946e-06, 1.194124e-03, 1.479606…
+    #> $ lower_90 <dbl> 4.384946e-06, 1.194124e-03, 1.479606…
+    #> $ upper_90 <dbl> 4.384946e-06, 1.194124e-03, 1.479606…
 
 ## Comparison
 
@@ -497,7 +513,9 @@ these estimates will propagate through all downstream steps that make
 use of them and the consequences of this may be hard to estimate.
 
     true_cdf <- data.frame(
-      delay = 1:26, cdf = pdislnorm(1:26, 2, 0.5), Method = "Data generating"
+      delay = 1:26,
+      cdf = pdislnorm(1:26, 2, 0.5) / pdislnorm(26, 2, 0.5),
+      Method = "Data generating"
     )
 
     combined <- bind_rows(
@@ -507,20 +525,18 @@ use of them and the consequences of this may be hard to estimate.
       epinowcast_cdf
     )
 
-    ggplot(combined, aes(x = delay, y = cdf)) +
+    ggplot(combined, aes(x = delay, y = cdf, col = Method, fill = Method)) +
+      geom_line(size = 1.1, alpha = 0.7) +
       geom_ribbon(
-        mapping = aes(
-          ymin = lower_90, ymax = upper_90, fill = Method
-        ),
-        alpha = 0.25,
+        data = combined |>
+          filter(!is.na(lower_90)),
+        mapping = aes(ymin = lower_90, ymax = upper_90), alpha = 0.25
       ) +
-      geom_line(aes(col = Method), size = 1.2, alpha = 0.8) +
       theme_bw() +
       theme(legend.position = "bottom") +
       guides(
-        fill = guide_none(),
-        col = guide_legend(nrow = 2),
-        linetype = guide_legend(nrow = 2)
+        fill = guide_legend(nrow = 2),
+        col = guide_legend(nrow = 2)
       ) +
       labs(
         x = "Delay between onset and case report",

@@ -41,7 +41,7 @@ rtdislnorm <- function(n, meanlog, sdlog, trunc = Inf) {
 linelist <- tibble(date_onset = rep(onsets$date, times = onsets$confirm)) |>
   ## create report dates
   mutate(
-    report_date = date_onset + rtdislnorm(n(), meanlog, sdlog),
+    report_date = date_onset + rtdislnorm(n(), meanlog, sdlog, max_delay),
     id = 1:n()
   ) |>
   ## create zeroes

@@ -4,9 +4,7 @@ title: Estimating reporting delays and nowcasting/forecasting infections with ep
 
 # Summary
 
-In this report we will make use of `epinowcast` an in development nowcasting package designed from the ground up around nowcating and aiming to replace `EpiNow2` for real-time usage. We will first nowcast a retrospective set of eample data to demonstrate the performance of the package before nowcasting the latest data and estimating an effective reproduction number estimate using `EpiNow2` and our nowcast.
-
- For more on `epinowcast` see [the package documentation](https://epiforecasts.io/epinowcast/). Note that the package is stable and in regulary use but still in development. More features, including modelling missing data and estimating effective reproduction number with additional delays will be added in the near future. If these features are of interest to you in the short term please reach out. 
+In this report we will make use of `epinowcast` an in development nowcasting package designed from the ground up around nowcasting and aiming to replace `EpiNow2` for real-time usage. We first explore the data using tools from `epinowcast` alongside others. We then nowcast the latest available data, visualise our results, and discussion potential options for improving performance on real-world data. As a check of our approach we construct some retrospective data, nowcast it, and compare our nowcast to the latest available data. We then extract the estimated delay distribution and compare it to the underlying distribution used to generate the data, the empirical distribution, and the distribution estimated using simpler methods. Finally we show how the output from `epinowcast` may be used in other surveillance packages such as `EpiNow2`, discuss potential issues with this approach, and highlight areas for futher work. For more on `epinowcast` see [the package documentation](https://epiforecasts.io/epinowcast/).
 
 # Load required libraries
 
@@ -22,6 +20,8 @@ suppressPackageStartupMessages(library("tidyr"))
 suppressPackageStartupMessages(library("fitdistrplus"))
 ```
 # Load the data
+
+As in other reports in this repository this data is generated using `inst/scripts/create_mock_dataset.r`. The simulation model is based on real-world datasets and an underlying assumption that the reporting delay is parametric and follows a log-normal distribution with a logmean of 2 and a logsd of 0.5.
 
 ```{r load_data}
 df <- load_data()
@@ -46,9 +46,9 @@ df |>
 
 There is also a significant excess at delay 0, which does not connect smoothly to the rest of the distribution and therefore seems to represent a separate process.
 
-# Preprocessiing the data with epinowcast
+# Preprocessing and visualising the data
 
-Before we can estimate the reporting delay for onsets or nowcast unreporteed onsets we need to preprocess the data into a format `epinowcast` can make use of. We first need to restrict to delays greater than 0 due to the evidence for two reporting processes (note this limitation will be removed in futuure versions of `epinowcast) and aggregate data into the cumulative count format `epinowcast` expects. Note that `epinowcast` defines the target date (here the onset date) as the `reference_date`. Streamlining converting data into an appropriate format is an area of future development.
+Before we can estimate the reporting delay for onsets or nowcast unreporteed onsets we need to preprocess the data into a format `epinowcast` can make use of. We first need to restrict to delays greater than 0 due to the evidence for two reporting processes and aggregate data into the cumulative count format `epinowcast` expects. Note that `epinowcast` defines the target date (here the onset date) as the `reference_date`.
 
 ```{r preprocess}
 count_df <- df |>
@@ -128,9 +128,10 @@ enw_df$missing_reference[[1]] |>
 
 # Nowcasting
 
-We use a relative simple model that assumes a Negative binomial observation process and a parametric log-normal reporting distribution. We also include a a random effect on the day of the week that onsets are reported to account for potentially variation due to the working weeek etc. 
+`epinowcast` implements a generic and extended form of one of the most common nowcasting approaches. This involves decomposing the task into two sub-models. An expectation model that captures the evolution of the underlying count data (here by default a daily random walk on the log scale) and a reporting model specified using the discrete hazard of a case being reported after a given number of days. More on the methodology of this implementation and its links to previous literature can be found [here](https://epiforecasts.io/epinowcast/). 
 
-As a first step we need to compile the `epinowcast` model, we do this with `threads = TRUE` in order to support multi-threading to speed up estimation. We also define our fitting options (note these are passed to `cmdstanr` which is the backend tool we use for model fitting).
+
+We use a simple model that assumes a Poisson observation process and a parametric log-normal reporting distribution. As a first step, we need to compile the `epinowcast` model, we do this with `threads = TRUE` in order to support multi-threading to speed up estimation. We also define our fitting options (note these are passed to `cmdstanr` which is the backend tool we use for model fitting).
 
 ```{r fit-opts}
 model <- enw_model(threads = TRUE)
@@ -146,11 +147,7 @@ We can then fit our nowcasting model. If interested in what each component is do
 
 ```{r simple-epinowcast}
 simple_nowcast <- epinowcast(
-  reference = enw_reference(
-    ~ rw(week), distribution = "lognormal", data = enw_df
-  ),
-  report = enw_report(~ (1 | day_of_week), data = enw_df),
-  obs = enw_obs(family = "negbin", data = enw_df),
+  obs = enw_obs(family = "poisson", data = enw_df),
   data = enw_df, model = model, fit = fit_opts,
 )
 ```
@@ -177,6 +174,15 @@ simple_nowcast |>
   plot(type = "posterior") +
   facet_wrap(vars(reference_date), scale = "free")
 ```
+
+In real-world data we might expect to see time-varying delays in reporting, overdispersed reporting, and the likelihood of reporting varying by report date (i.e due to the day fo the week ec.). All of these complexities can be modelled using `epinowcast 0.1.0`.
+
+As we saw in our data we also have negative delays, overinflated counts with zero delays, reported cases missing onsets and a clear day of the week effect in the underlying simulated data. Modelling all of these features, rather than exluding them or ignoring them, would likely reduce bias. These features, exluding negative delays, are on the roadmap for `epinowcast 0.2.0` please reach out if they would be of use to you. Negative delays are potentially the most complex modelling issue as they are technically not possible if we define a reporting date to be later than or equal to the reference date, which is how many nowcasting models work. We instead need to a generative process that leads to both of these observations. Doing this is planned for a future version of `epinowcast` but not currently in the roadmap again reach out if this is key to your use case.
+
+# Retrospective evaluation
+
+In order to understand how well our nowcasting method is working in real-time it can be useful to have an understanding on how well it did on past data that is know up to date, or more up to date. Here we conduct another nowcast, in the same way as above but on a reconstructed version of what we think the data available on the 1st of April 2020 would have looked like. The first step is to construct this retrospective data and to extract what the latest data looks like for this time period.
+
 
 # Mean delay
 

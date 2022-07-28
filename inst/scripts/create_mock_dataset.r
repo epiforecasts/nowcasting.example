@@ -24,7 +24,7 @@ onsets <- example_confirmed |>
   mutate(confirm = rbinom(
     n = n(),
     size = confirm,
-    p = 0.002
+    p = 0.02
   ))
 
 max_delay <- 26

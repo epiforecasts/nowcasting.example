@@ -226,8 +226,9 @@ retro_nowcast <- retro_df |>
   enw_preprocess_data(max_delay = max_delay) |>
   (\(data) epinowcast(
     obs = enw_obs(family = "poisson", data = data),
-    data = data, model = model, fit = fit_opts,
-  ))()
+    data = data, model = model, fit = fit_opts
+    )
+  )()
 ```
 
 We now plot this retrospective nowcast against the latest available data (noting that some of the more recently reported data may not be fully complete yet). Here we see our approach is doing relatively well at capturing the lastest available obserservations (triangles) using the data available at the time (circles) though perhaps is a little more uncertain than we might ideally like.

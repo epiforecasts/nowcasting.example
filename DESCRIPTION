@@ -10,7 +10,6 @@ Suggests:
   rstan,
   posterior,
   tidyr,
-
   fitdistrplus,
   forcats
 Additional_repositories: https://epiforecasts.r-universe.dev

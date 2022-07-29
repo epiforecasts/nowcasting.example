@@ -402,8 +402,9 @@ retro_nowcast <- retro_df |>
   enw_preprocess_data(max_delay = max_delay) |>
   (\(data) epinowcast(
     obs = enw_obs(family = "poisson", data = data),
-    data = data, model = model, fit = fit_opts,
-  ))()
+    data = data, model = model, fit = fit_opts
+    )
+  )()
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
 #> Chain 1 finished in 11.9 seconds.

@@ -98,11 +98,15 @@ Our output contains several useful measures including the maximum date of observ
 To start with we may want to plot the latest available data alongside some previous updates (blue bars become increasingly pale as data get more recent) and the data by date of report (grey bars).
 
 ```{r latest-data}
-complete_df |>
-  filter(
-    report_date %in% as.Date(c("2020-03-15", "2020-04-01", "2020-04-15")) |
-    report_date == max(report_date)
-  ) |>
+enw_df$new_confirm[[1]] |>
+  mutate(report_date = case_when(
+    report_date <= as.Date("2020-03-15") ~ as.Date("2020-03-15"),
+    report_date <= as.Date("2020-04-01") ~ as.Date("2020-04-01"),
+    report_date <= as.Date("2020-04-15") ~ as.Date("2020-04-15"),
+    report_date <= max(report_date) ~ as.Date(max(report_date))
+  )) |>
+  group_by(reference_date, report_date) |>
+  summarise(confirm = sum(new_confirm), .groups = "drop") |>
   mutate(report_date = factor(report_date) |>
     forcats::fct_rev()
   ) |>
@@ -117,7 +121,7 @@ complete_df |>
     fill = "lightgrey", alpha = 0.8,
     aes(x = report_date)
   ) +
-  geom_col(position = "identity", alpha = 0.7, col = "lightgrey") +
+  geom_col(position = "stack", alpha = 1, col = "lightgrey") +
   geom_vline(
     aes(xintercept = as.Date(report_date)), linetype = 2, alpha = 0.9
   ) +
@@ -332,9 +336,7 @@ combined <- bind_rows(
 ggplot(combined, aes(x = delay, y = cdf, col = Method, fill = Method)) +
   geom_line(size = 1.1, alpha = 0.7) +
   geom_ribbon(
-    data = combined |>
-      filter(!is.na(lower_90)),
-    mapping = aes(ymin = lower_90, ymax = upper_90), alpha = 0.25
+    aes(ymin = lower_90, ymax = upper_90), alpha = 0.25
   ) +
   theme_bw() +
   theme(legend.position = "bottom") +

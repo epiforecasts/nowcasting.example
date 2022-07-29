@@ -54,9 +54,9 @@ case study rerun to explore other reporting scenarios.
     glimpse(df)
     #> Rows: 311
     #> Columns: 3
-    #> $ date_onset  [3m[38;5;246m<date>[39m[23m 2020-02-29, 2020-02-29, NA, 2020…
-    #> $ report_date [3m[38;5;246m<date>[39m[23m 2020-03-18, 2020-03-05, 2020-03-…
-    #> $ delay       [3m[38;5;246m<int>[39m[23m 18, 5, NA, 7, 8, 4, 11, 0, NA, 0,…
+    #> $ date_onset  [3m[38;5;246m<date>[39m[23m 2020-02-29, 2020-02-29, NA, 2020-03-02…
+    #> $ report_date [3m[38;5;246m<date>[39m[23m 2020-03-18, 2020-03-05, 2020-03-05, 20…
+    #> $ delay       [3m[38;5;246m<int>[39m[23m 18, 5, NA, 7, 8, 4, 11, 0, NA, 0, 20, 5…
 
 # Data exploration
 
@@ -110,9 +110,9 @@ the `reference_date`.
     glimpse(count_df)
     #> Rows: 152
     #> Columns: 3
-    #> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-…
-    #> $ report_date    <date> 2020-03-05, 2020-03-18, 2020-…
-    #> $ confirm        <int> 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, …
+    #> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-03-02,…
+    #> $ report_date    <date> 2020-03-05, 2020-03-18, 2020-03-09,…
+    #> $ confirm        <int> 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 2, 1, …
 
 We can now use preprocessing functions from `epinowcast` to complete all
 combinations of report and reference dates, prepare for modelling, and
@@ -133,23 +133,21 @@ bias.
     glimpse(complete_df)
     #> Rows: 1,049
     #> Columns: 3
-    #> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-…
-    #> $ report_date    <date> 2020-02-29, 2020-03-01, 2020-…
-    #> $ confirm        <int> 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, …
+    #> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-02-29,…
+    #> $ report_date    <date> 2020-02-29, 2020-03-01, 2020-03-02,…
+    #> $ confirm        <int> 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, …
 
     enw_df <- complete_df |>
       enw_preprocess_data(max_delay = max_delay)
     enw_df
     #>                     obs         new_confirm
     #> 1: <data.table[1019x7]> <data.table[966x9]>
-    #>                latest  missing_reference
-    #> 1: <data.table[53x8]> <data.table[53x4]>
-    #>     reporting_triangle      metareference
-    #> 1: <data.table[53x25]> <data.table[53x7]>
-    #>             metareport          metadelay time
-    #> 1: <data.table[75x10]> <data.table[23x4]>   53
-    #>    snapshots by groups max_delay   max_date
-    #> 1:        53         1        23 2020-04-21
+    #>                latest  missing_reference  reporting_triangle
+    #> 1: <data.table[53x8]> <data.table[53x4]> <data.table[53x25]>
+    #>         metareference          metareport          metadelay
+    #> 1: <data.table[53x7]> <data.table[75x10]> <data.table[23x4]>
+    #>    time snapshots by groups max_delay   max_date
+    #> 1:   53        53         1        23 2020-04-21
 
 Our output contains several useful measures including the maximum date
 of observations, the maximum delay, the number of days included in the
@@ -161,11 +159,15 @@ To start with we may want to plot the latest available data alongside
 some previous updates (blue bars become increasingly pale as data get
 more recent) and the data by date of report (grey bars).
 
-    complete_df |>
-      filter(
-        report_date %in% as.Date(c("2020-03-15", "2020-04-01", "2020-04-15")) |
-        report_date == max(report_date)
-      ) |>
+    enw_df$new_confirm[[1]] |>
+      mutate(report_date = case_when(
+        report_date <= as.Date("2020-03-15") ~ as.Date("2020-03-15"),
+        report_date <= as.Date("2020-04-01") ~ as.Date("2020-04-01"),
+        report_date <= as.Date("2020-04-15") ~ as.Date("2020-04-15"),
+        report_date <= max(report_date) ~ as.Date(max(report_date))
+      )) |>
+      group_by(reference_date, report_date) |>
+      summarise(confirm = sum(new_confirm), .groups = "drop") |>
       mutate(report_date = factor(report_date) |>
         forcats::fct_rev()
       ) |>
@@ -180,7 +182,7 @@ more recent) and the data by date of report (grey bars).
         fill = "lightgrey", alpha = 0.8,
         aes(x = report_date)
       ) +
-      geom_col(position = "identity", alpha = 0.7, col = "lightgrey") +
+      geom_col(position = "stack", alpha = 1, col = "lightgrey") +
       geom_vline(
         aes(xintercept = as.Date(report_date)), linetype = 2, alpha = 0.9
       ) +
@@ -235,6 +237,7 @@ our fitting options (note these are passed to `cmdstanr` which is the
 backend tool used in `epinowcast` for model fitting).
 
     model <- enw_model(threads = TRUE)
+    #> -\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\| 
 
     fit_opts <- enw_fit_opts(
         chains = 2, parallel_chains = 2, threads_per_chain = 2,
@@ -253,12 +256,12 @@ observations preprocessed into the format required for modelling).
     )
     #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
     #> 
-    #> Chain 1 finished in 28.3 seconds.
-    #> Chain 2 finished in 28.9 seconds.
+    #> Chain 2 finished in 25.3 seconds.
+    #> Chain 1 finished in 26.6 seconds.
     #> 
     #> Both chains finished successfully.
-    #> Mean chain execution time: 28.6 seconds.
-    #> Total execution time: 29.0 seconds.
+    #> Mean chain execution time: 25.9 seconds.
+    #> Total execution time: 26.7 seconds.
 
 The first thing we might want to do is look at the summarised nowcast
 for the last week.
@@ -269,22 +272,22 @@ for the last week.
         reference_date, report_date, delay, confirm, mean, median, sd, mad
       ) |>
       tail(n = 7)
-    #>    reference_date report_date delay confirm   mean
-    #> 1:     2020-04-15  2020-04-21     6       0 2.1060
-    #> 2:     2020-04-16  2020-04-21     5       1 3.6190
-    #> 3:     2020-04-17  2020-04-21     4       1 4.0935
-    #> 4:     2020-04-18  2020-04-21     3       0 3.4575
-    #> 5:     2020-04-19  2020-04-21     2       0 3.6855
-    #> 6:     2020-04-20  2020-04-21     1       0 3.9230
-    #> 7:     2020-04-21  2020-04-21     0       0 4.0480
-    #>    median       sd    mad
-    #> 1:      2 1.698295 1.4826
-    #> 2:      3 1.957231 1.4826
-    #> 3:      4 2.231871 1.4826
-    #> 4:      3 2.573034 2.9652
-    #> 5:      3 3.015815 2.9652
-    #> 6:      3 3.297045 2.9652
-    #> 7:      3 3.792873 2.9652
+    #>    reference_date report_date delay confirm   mean median
+    #> 1:     2020-04-15  2020-04-21     6       0 2.0490      2
+    #> 2:     2020-04-16  2020-04-21     5       1 3.5845      3
+    #> 3:     2020-04-17  2020-04-21     4       1 4.1035      4
+    #> 4:     2020-04-18  2020-04-21     3       0 3.4535      3
+    #> 5:     2020-04-19  2020-04-21     2       0 3.7620      3
+    #> 6:     2020-04-20  2020-04-21     1       0 3.9470      3
+    #> 7:     2020-04-21  2020-04-21     0       0 4.0760      3
+    #>          sd    mad
+    #> 1: 1.628473 1.4826
+    #> 2: 1.933321 1.4826
+    #> 3: 2.296612 1.4826
+    #> 4: 2.693040 2.9652
+    #> 5: 3.024885 2.9652
+    #> 6: 3.244141 2.9652
+    #> 7: 3.760624 2.9652
 
 We can also plot this nowcast against the latest data.
 
@@ -307,12 +310,9 @@ information, or from biases introduced by our estimation method.
     simple_nowcast |>
       summary(type = "fit", variables = c("refp_mean", "refp_sd")) |>
       dplyr::select(variable, mean, median, sd, mad)
-    #>        variable      mean    median         sd
-    #> 1: refp_mean[1] 2.0916379 2.0906000 0.04112836
-    #> 2:   refp_sd[1] 0.4522812 0.4501565 0.03162388
-    #>           mad
-    #> 1: 0.03914064
-    #> 2: 0.03307829
+    #>        variable      mean    median         sd        mad
+    #> 1: refp_mean[1] 2.0898384 2.0885200 0.04101454 0.03965214
+    #> 2:   refp_sd[1] 0.4504082 0.4474235 0.03070834 0.03067129
 
 In real-world data we might expect to see delays drawn from different
 distributions or no apparent distribution, time-varying delays in
@@ -369,12 +369,12 @@ used.
       ))()
     #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
     #> 
-    #> Chain 2 finished in 15.2 seconds.
-    #> Chain 1 finished in 16.5 seconds.
+    #> Chain 1 finished in 13.9 seconds.
+    #> Chain 2 finished in 15.0 seconds.
     #> 
     #> Both chains finished successfully.
-    #> Mean chain execution time: 15.9 seconds.
-    #> Total execution time: 16.6 seconds.
+    #> Mean chain execution time: 14.4 seconds.
+    #> Total execution time: 15.1 seconds.
 
 We now plot this retrospective nowcast against the latest available data
 (noting that some of the more recently reported data may not be fully
@@ -495,11 +495,11 @@ code.
     glimpse(epinowcast_cdf)
     #> Rows: 52
     #> Columns: 5
-    #> $ Method   <chr> "epinowcast (real-time)", "epinowcas…
-    #> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1…
-    #> $ cdf      <dbl> 4.384946e-06, 1.194124e-03, 1.479606…
-    #> $ lower_90 <dbl> 4.384946e-06, 1.194124e-03, 1.479606…
-    #> $ upper_90 <dbl> 4.384946e-06, 1.194124e-03, 1.479606…
+    #> $ Method   <chr> "epinowcast (real-time)", "epinowcast (rea…
+    #> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,…
+    #> $ cdf      <dbl> 3.927164e-06, 1.144020e-03, 1.454541e-02, …
+    #> $ lower_90 <dbl> 3.927164e-06, 1.144020e-03, 1.454541e-02, …
+    #> $ upper_90 <dbl> 3.927164e-06, 1.144020e-03, 1.454541e-02, …
 
 ## Comparison
 
@@ -528,9 +528,7 @@ use of them and the consequences of this may be hard to estimate.
     ggplot(combined, aes(x = delay, y = cdf, col = Method, fill = Method)) +
       geom_line(size = 1.1, alpha = 0.7) +
       geom_ribbon(
-        data = combined |>
-          filter(!is.na(lower_90)),
-        mapping = aes(ymin = lower_90, ymax = upper_90), alpha = 0.25
+        aes(ymin = lower_90, ymax = upper_90), alpha = 0.25
       ) +
       theme_bw() +
       theme(legend.position = "bottom") +

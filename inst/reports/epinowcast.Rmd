@@ -14,11 +14,16 @@ knitr::opts_chunk$set(
 
 # Summary
 
-In this report we make use of `epinowcast`, an in development nowcasting package, designed from the ground up around nowcasting with the aim of replacing `EpiNow2` for real-time usage. We first explore the data using tools from `epinowcast` alongside others. We then nowcast the latest available data, visualise our results, and discussion potential options for improving performance on real-world data. As a check of our approach we construct some retrospective data, nowcast it, and compare our nowcast to the latest available data. We then extract the estimated delay distribution and compare it to the underlying distribution used to generate the data, the empirical distribution, and the distribution estimated using simpler methods. Finally, we show how the output from `epinowcast` may be used in other surveillance packages such as `EpiNow2`. Throughout this case study we discuss potential issues with the approaches taken, and highlight areas for futher work. For more on `epinowcast` and it's planned development roadmap see [the package documentation](https://epiforecasts.io/epinowcast/).
+In this report we make use of [epinowcast](https://epiforecasts.io/epinowcast/), a nowcasting package under development and designed from the ground up around nowcasting with the aim of replacing [EpiNow2](https://epiforecasts.io/EpiNow2/) for real-time usage. We first explore the data using tools from `epinowcast` alongside others. We then nowcast the latest available data, visualise our results, and discuss potential options for improving performance on real-world data. As a check of our approach we construct some retrospective data, nowcast it, and compare our nowcast to the latest available data. We then extract the estimated delay distribution and compare it to the underlying distribution used to generate the data, the empirical distribution, and the distribution estimated using simpler methods. Finally, we show how the output from `epinowcast` may be used in other surveillance packages such as `EpiNow2`. Throughout this case study we discuss potential issues with the approaches taken, and highlight areas for futher work. For more on `epinowcast` and it's planned development roadmap see [the package documentation](https://epiforecasts.io/epinowcast/). An [alternative approach](est_trunc_epinow2.md) to the problem using `EpiNow2`, suffering from some limitations that `epinowcast` is aiming to address, is also available in this repository.
 
 # Load required libraries
 
-We first load the packages required for this case study. These can be installed using the `DESCRIPTION` file provided in the `nowcasting.example` repository.
+We first load the packages required for this case study. These can be installed using
+```{r}
+remotes::install_github("epiforecasts/nowcasting.example")
+```
+
+This report is based on the current stable version `epinowcast 0.1.0` but we highlight below where relevant missing features are planned for the next version `epinowcast 0.2.0`.
 
 ```{r init}
 library("epinowcast")
@@ -65,7 +70,7 @@ There is also a significant excess at delay 0, which does not connect smoothly t
 
 # Preprocessing and visualising the data
 
-Before we can estimate the reporting delay for onsets or nowcast unreporteed onsets we need to preprocess the data into a format `epinowcast` can make use of. We first need to restrict to delays greater than 0 due to the evidence for two reporting processes and aggregate data into the cumulative count format `epinowcast` expects. Note that `epinowcast` defines the target date (here the onset date) as the `reference_date`.
+Before we can estimate the reporting delay for onsets or nowcast unreporteed onsets we need to preprocess the data into a format `epinowcast` can make use of. We first restrict to delays greater than 0 due to the evidence for two reporting processes and aggregate data into the cumulative count format `epinowcast` expects, removing missing data in the process (handling missing data in `epinocwast` is a feature currently [being implemented](https://github.com/epiforecasts/epinowcast/pull/107)). Note that `epinowcast` defines the target date (here the onset date) as the `reference_date`.
 
 ```{r preprocess}
 count_df <- df |>
@@ -81,7 +86,7 @@ count_df <- df |>
 glimpse(count_df)
 ```
 
-We can now use preprocessing functions from `epinowcast` to complete all combinations of report and reference dates, prepare for modelling, and produce a range of useful summary datasets. Note that `epinowcast` returns output as `data.table` but users can make use of whatever data manipulation tools they are most comfortable with. We first make sure all date combinations are present and then use a wrapper, `enw_preprocess_data()` to complete the rest of the required preprocessing steps. We set the maximum delay using the largest observed delay which assumes reporting after this point is not possible. In general, users should consider setting the maximum delay with care as larger values require significantly increased compute whilst smaller values may insufficiently capture reporting distributions leading to bias.
+We can now use preprocessing functions from `epinowcast` to complete all combinations of report and reference dates, prepare for modelling, and produce a range of useful summary datasets. Note that `epinowcast` returns output as `data.table` but users can make use of whatever data manipulation tools they are most comfortable with (e.g., tidyverse tools). We first make sure all date combinations are present and then use a wrapper, `enw_preprocess_data()` to complete the rest of the required preprocessing steps. We set the maximum delay using the largest observed delay which assumes reporting after this point is not possible. In general, users should consider setting the maximum delay with care as larger values require significantly increased compute whilst smaller values may insufficiently capture reporting distributions leading to bias.
 
 ```{r epinowcast-preprocess}
 complete_df <- count_df |>

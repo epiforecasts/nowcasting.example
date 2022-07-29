@@ -5,7 +5,7 @@ EpiNow2
 # Summary
 
 In this report we make use of
-[EpiNow2](https://epiforecasts.io/EpiNow2/), toolset for real-time
+[EpiNow2](https://epiforecasts.io/EpiNow2/), a toolset for real-time
 analysis of infectious disease dynamics, for estimating reporting delays
 and using them to conduct a nowcast. We first explore the data extract
 the estimated delay distribution and compare it to the the empirical

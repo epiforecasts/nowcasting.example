@@ -3,10 +3,9 @@
 ## from: https://www.gov.uk/government/publications/monkeypox-outbreak-technical-briefings/investigation-into-monkeypox-outbreak-in-england-technical-briefing-1
 ## Preliminary estimate of the serial interval is 9.8 days though with high uncertainty (95% credible interval, 5.9 to 21.4).
 ## It is unclear whether this refers to the estimate of the mean, or the spread of serial intervals
-## It is also unclear whether this is growth-adjusted
-## interpreted as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
-## with sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
-## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
+## It is also unclear whether this is growth-adjusted.
+## We interpret it here as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
+## and sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
 generation_interval <- list(
   mean = 13.65,
   mean_sd = 0,

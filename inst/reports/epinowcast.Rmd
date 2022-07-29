@@ -39,34 +39,11 @@ library("purrr")
 library("forcats")
 ```
 
-# Load the data
-
-As in other reports in this repository this data is generated using `inst/scripts/create_mock_dataset.r`. The simulation model is based on real-world datasets and an underlying assumption that the reporting delay is parametric and follows a log-normal distribution with a logmean of 2 and a logsd of 0.5. On top of this additional processes have been modelled so that some proportion of cases are mising onsets, the number of cases with an onset reported on the same day is inflated versus what would be expected from a parametric distribution, and cases with a negative onset to report delay. Settings in `inst/scripts/create_mock_dataset.r` can be altered and the code in this case study rerun to explore other reporting scenarios.
-
-```{r load_data}
-df <- load_data()
-max_delay <- max(df$delay, na.rm = TRUE)
-glimpse(df)
+```{r load-data, child = "rmdchunks/load_data.Rmd"}
 ```
 
-# Data exploration
-
-We start by visualising the observed delays from onset to report.
-
-```{r plot_data}
-ggplot(df, aes(x = delay)) +
-  geom_histogram(binwidth = 1, col = "#d3d3d36e") +
-  theme_bw()
+```{r data-exploration, child = "rmdchunks/data_exploration.Rmd"}
 ```
-
-As expected, based on the generative model used to simulate our case study data, there are negative delays (report before onset) - possibly representing either data entry errors or positive tests during the incubation period so hard to characterise as part of the reporting delay distribution.
-
-```{r negative_delays}
-df |>
-  filter(delay < 0)
-```
-
-There is also a significant excess at delay 0, which does not connect smoothly to the rest of the distribution and therefore seems to represent a separate process or the combination of two processes. 
 
 # Preprocessing and visualising the data
 
@@ -244,47 +221,9 @@ plot(retro_nowcast, latest_retro_obs) +
 
 # Comparison to simpler approaches
 
-As for our `EpiNow2` comparison here we compare the etimated delay distribution from `epinowcast` with empirical estimates, estimates from simpler methods, and the known distribution used when simulating the data.
+We compare the etimated delay distribution from `epinowcast` with empirical estimates, estimates from simpler methods, and the known distribution used when simulating the data.
 
-## Empirical delay
-
-We first extract the observed empirical delay which would likely be the first thing we estimate in a real-world setting. This could also be used directly for nowcasting if we were confident it was static over the timespan of our data, and the bias from truncation was small.
-
-```{r empirical}
-positive_df <- df |>
-  filter(delay > 0)
-
-x <- 1:26
-emp <- ecdf(positive_df$delay)
-emp_cdf <- data.frame(
-  delay = x,
-  cdf = emp(x),
-  Method = "Empirical"
-)
-
-tail(emp_cdf, n = 7)
-```
-
-## Discretised lognormal fitted directly
-
-As we assume the reporting distribution is static and as our infectious disease data appears to be relatively stable we could expect a direct estimate of the underlying reporting distribution to be minimally biased. In settings where we have rapid exponential growth we would expect significantly more bias and would likely need to use methods adjusted for truncation (as many nowcasting methods are or use a specialised real-time distribution estimation method). In settings where we have very little data that is not partially truncated or we expect variation in our reporting distributions over time we would also need to consider these approaches.
-
-```{r dislnorm}
-ddislnorm <- function(x, meanlog, sdlog) {
-  return(plnorm(x, meanlog, sdlog) - plnorm(x - 1, meanlog, sdlog))
-}
-pdislnorm <- plnorm
-qdislnorm <- qlnorm
-
-y <- fitdist(
-  positive_df$delay,
-  "dislnorm",
-  start = list(meanlog = 0, sdlog = 1)
-)
-ln <- pdislnorm(1:26, y$estimate[1], y$estimate[2])
-ln_cdf <- data.frame(delay = x, cdf = ln, Method = "Direct")
-
-tail(ln_cdf, n = 7)
+```{r load-data, child = "rmdchunks/simple_dists.Rmd"}
 ```
 
 ## Extract the lognormal CMF from `epinowcast`
@@ -311,55 +250,25 @@ extract_epinowcast_cdf <- function(nowcast) {
   )
 }
 
-epinowcast_cdf <- list(
+nowcast_cdf <- list(
   "epinowcast (real-time)" = simple_nowcast,
   "epinowcast (retrospective)" = retro_nowcast
 ) |>
   map_df(extract_epinowcast_cdf, .id = "Method")
 
-glimpse(epinowcast_cdf)
+glimpse(nowcast_cdf)
 ```
 
-## Comparison
-
-We now compare the various approaches to estimate the reporting distribution against the known distribution used to generate the data. We see that in this simple case all methods return similiar results but that none fully capture the data generating process. This is likely due to excluding onsets reported on the same day and motivates more complex estimation methods that can account for  this. Note that the bias in these estimates will propagate through all downstream steps that make use of them and the consequences of this may be hard to estimate.
-
-```{r compare}
-true_cdf <- data.frame(
-  delay = 1:26,
-  cdf = pdislnorm(1:26, 2, 0.5) / pdislnorm(26, 2, 0.5),
-  Method = "Data generating"
-)
-
-combined <- bind_rows(
-  true_cdf,
-  emp_cdf,
-  ln_cdf,
-  epinowcast_cdf
-)
-
-ggplot(combined, aes(x = delay, y = cdf, col = Method, fill = Method)) +
-  geom_line(size = 1.1, alpha = 0.7) +
-  geom_ribbon(
-    aes(ymin = lower_90, ymax = upper_90), alpha = 0.25
-  ) +
-  theme_bw() +
-  theme(legend.position = "bottom") +
-  guides(
-    fill = guide_legend(nrow = 2),
-    col = guide_legend(nrow = 2)
-  ) +
-  labs(
-    x = "Delay between onset and case report",
-    y = "Cumulative density function of the reporting distribution"
-    )
+```{r load-data, child = "rmdchunks/dist_comparison.Rmd"}
 ```
 
 # Estimate the effective reproduction number using nowcast onsets
 
 We now give an example of a potential use case estimating the effective reproduction number in real-time using `EpiNow2`. Note that here we make use of cases by date of onset but exclude onsets with a zero day delay in reporting, onsets with a negative day delay in reporting, and reported cases missing a onset date. In this example, where we know these proportions are static this will not introdue bias but in general this may not be the case. Note that we also only use the median posterior nowcast estimate and so our effective reproduction number estimates will be spuriously precise closer to the date of estimation. A simple approach to deal with this is to re-estimate for multiple posterior nowocast samples. A more robust approach is to estimate everything in a single model and this is a planned feature for `epinowcast`. Please reach out if this functionality could be of use to you.
 
-```{r estimate_infections, fig.height = 9}
+First we construct the data set of onsets.
+
+```{r reported_cases}
 ## create a data set of onsets combining observations with nowcast estimates
 ## note  that we exclude reported cases with missing onsets but that this will 
 ## only introduce bias if the proportion missing varies over time.
@@ -373,45 +282,10 @@ reported_cases <- complete_df |>
   bind_rows(nowcast_cases) |>
   rename(date = reference_date) |>
   dplyr::select(date, confirm)
-
-## generation interval
-## from: https://www.gov.uk/government/publications/monkeypox-outbreak-technical-briefings/investigation-into-monkeypox-outbreak-in-england-technical-briefing-1
-## Preliminary estimate of the serial interval is 9.8 days though with high uncertainty (95% credible interval, 5.9 to 21.4).
-## It is unclear whether this refers to the estimate of the mean, or the spread of serial intervals
-## It is also unclear whether this is growth-adjusted
-## interpreted as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
-## with sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
-## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
-generation_interval <- list(
-  mean = 13.65,
-  mean_sd = 0,
-  sd = 3.7,
-  sd_sd = 0,
-  max = 25
-)
-
-## incubation period
-## from: https://www.who.int/news-room/fact-sheets/detail/monkeypox
-## "usually from 6 to 13 days but can range from 5 to 21"
-## interpreted as log-normally distributed with 2/3 contained between 6 and 13:
-## => \mu*/\sigma* = 6; \mu^* * \sigma* = 13
-## => \mu* = 9, \sigma* = 1.5,  max = 21
-## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
-## also adding a small amount of uncertainty
-incubation_period <- list(
-  mean = log(9),
-  mean_sd = 0.1,
-  sd = log(1.5),
-  sd_sd = 0.1,
-  max = 21
-)
-
-inf <- estimate_infections(
-  reported_cases = reported_cases,
-  generation_time = generation_interval,
-  delays = delay_opts(incubation_period),
-  verbose = FALSE
-)
-
-plot(inf)
 ```
+
+We then use the `estimate_infections` function contained in `EpiNow2` on this data set to estimate the reproduction number.
+
+```{r load-data, child = "rmdchunks/estimate_infections.Rmd"}
+```
+

@@ -2,41 +2,38 @@
 title: Estimating reporting delays and nowcasting/forecasting infections with EpiNow2
 ---
 
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  message = FALSE, warning = FALSE
+)
+```
+
+# Summary
+
+In this report we make use of [EpiNow2](https://epiforecasts.io/EpiNow2/), toolset for real-time analysis of infectious disease dynamics, for estimating reporting delays and using them to conduct a nowcast. We first explore the data extract the estimated delay distribution and compare it to the the empirical distribution, and the distribution estimated using simpler methods. We then show how the these estimates may be used in `EpiNow2` to perform nowcasts, forecasts and estimation of reproduction numbers and growth rates. For more on `EpiNow2`  roadmap see [the package documentation](https://EpiNow2.io/epinowcast/). An [alternative approach](epinowcast.md) to the problem using `epinowcast`, a package undergoing active development and aiming to address some of the limitations `EpiNow2` with a view to eventually replacing it, is also available in this repository.
+
 # Load required libraries
 
+We first load the packages required for this case study. These can be installed using 
+```{r include = FALSE}
+remotes::install_github("epiforecasts/nowcasting.example")
+```
+
 ```{r init}
-suppressPackageStartupMessages(library("EpiNow2"))
-suppressPackageStartupMessages(library("nowcasting.example")) ## devtools::install()
-suppressPackageStartupMessages(library("dplyr"))
-suppressPackageStartupMessages(library("ggplot2"))
-suppressPackageStartupMessages(library("rstan"))
-suppressPackageStartupMessages(library("posterior"))
-suppressPackageStartupMessages(library("tidyr"))
-suppressPackageStartupMessages(library("fitdistrplus"))
+library("EpiNow2")
+library("nowcasting.example") ## devtools::install()
+library("dplyr")
+library("ggplot2")
+library("rstan")
+library("posterior")
+library("tidyr")
+library("fitdistrplus")
 ```
-# Load the data
-
-```{r load_data}
-df <- load_data()
-max_delay <- max(df$delay, na.rm = TRUE)
+```{r load-data, child = "rmdchunks/load_data.Rmd"}
 ```
 
-# Data exploration
-
-```{r plot_data}
-ggplot(df, aes(x = delay)) +
-  geom_histogram(binwidth = 1) +
-  theme_bw()
+```{r data-exploration, child = "rmdchunks/data_exploration.Rmd"}
 ```
-
-There are negative delays (report before onset) - possibly representing either data entry errors or positive tests during the incubation period so hard to characterise as part of the reporting delay distribution.
-
-```{r negative_delays}
-df |>
-  filter(delay < 0)
-```
-
-There is also a significant excess at delay 0, which does not connect smoothly to the rest of the distribution and therefore seems to represent a separate process.
 
 # Estimating the reporting delay
 
@@ -88,112 +85,38 @@ mean
 
 # Comparison to simpler approaches
 
-## Empirical delay
+We compare the etimated delay distribution from `EpiNow2` with empirical estimates, estimates from simpler methods, and the known distribution used when simulating the data.
 
-```{r empirical}
-x <- 1:26
-emp <- ecdf(positive_df$delay)
-emp_cdf <- data.frame(
-  delay = x,
-  cdf = emp(x),
-  Method = "empirical"
-)
+```{r load-data, child = "rmdchunks/simple_dists.Rmd"}
 ```
 
-## Discretised lognormal fitted directly
+## Extract the lognormal CMF from `EpiNow2`
 
-```{r dislnorm}
-ddislnorm <- function(x, meanlog, sdlog) {
-  return(plnorm(x, meanlog, sdlog) - plnorm(x - 1, meanlog, sdlog))
-}
-pdislnorm <- plnorm
-qdislnorm <- qlnorm
+We can optain the cumulative mass function of the truncation distribution as estimated by `EpiNow2` directly:
 
-y <- fitdist(
-  positive_df$delay,
-  "dislnorm",
-  start = list(meanlog = 0, sdlog = 1)
-)
-ln <- pdislnorm(1:26, y$estimate[1], y$estimate[2])
-ln_cdf <- data.frame(delay = x, cdf = ln, Method = "direct")
-
-epinow_cdf <- est$cmf |>
+```{r epinow2-cmf}
+nowcast_cdf <- est$cmf |>
   rename(delay = index, cdf = mean) |>
   mutate(Method = "EpiNow2")
 ```
 
-## Comparison
-
-```{r compare}
-combined <- bind_rows(
-  emp_cdf,
-  ln_cdf,
-  epinow_cdf
-)
-
-ggplot(combined, aes(x = delay, y = cdf, linetype = Method)) +
-  geom_line() +
-  geom_ribbon(
-    mapping = aes(ymin = lower_90, ymax = upper_90),
-    alpha = 0.25
-  ) +
-  theme_bw()
+```{r load-data, child = "rmdchunks/dist_comparison.Rmd"}
 ```
 
 # Nowcast
 
-```{r estimate_infections}
+First we construct the data set of onsets.
+
+```{r reported_cases}
 ## create a data set of reported cases
 ## (would be better to use onsets but missing data are an issue)
 reported_cases <- df |>
   count(report_date, name = "confirm") |>
   rename(date = report_date)
-
-## generation interval
-## from: https://www.gov.uk/government/publications/monkeypox-outbreak-technical-briefings/investigation-into-monkeypox-outbreak-in-england-technical-briefing-1
-## Preliminary estimate of the serial interval is 9.8 days though with high uncertainty (95% credible interval, 5.9 to 21.4).
-## It is unclear whether this refers to the estimate of the mean, or the spread of serial intervals
-## It is also unclear whether this is growth-adjusted
-## interpreted as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
-## with sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
-## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
-generation_interval <- list(
-  mean = 13.65,
-  mean_sd = 0,
-  sd = 3.7,
-  sd_sd = 0,
-  max = 25
-)
-
-## incubation period
-## from: https://www.who.int/news-room/fact-sheets/detail/monkeypox
-## "usually from 6 to 13 days but can range from 5 to 21"
-## interpreted as log-normally distributed with 2/3 contained between 6 and 13:
-## => \mu*/\sigma* = 6; \mu^* * \sigma* = 13
-## => \mu* = 9, \sigma* = 1.5,  max = 21
-## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
-## also adding a small amount of uncertainty
-incubation_period <- list(
-  mean = log(9),
-  mean_sd = 0.1,
-  sd = log(1.5),
-  sd_sd = 0.1,
-  max = 21
-)
-
-delays <- delay_opts(
-  ## incubation period
-  incubation_period,
-  ## reporting delay
-  est$dist
-)
-
-inf <- estimate_infections(
-  reported_cases = reported_cases,
-  generation_time = generation_interval,
-  delays = delays,
-  verbose = FALSE
-)
-
-plot(inf)
 ```
+
+We then use the `estimate_infections` function contained in `EpiNow2` on this data set to obtain a nowcast, forecast and reproduction number estimate.
+
+```{r load-data, child = "rmdchunks/estimate_infections.Rmd"}
+```
+

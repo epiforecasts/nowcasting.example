@@ -10,8 +10,10 @@ Suggests:
   rstan,
   posterior,
   tidyr,
+
   fitdistrplus,
   forcats
+Additional_repositories: https://epiforecasts.r-universe.dev
 Remotes:
   epiforecasts/epinowcast@develop
 RoxygenNote: 7.2.0

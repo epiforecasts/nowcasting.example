@@ -6,7 +6,7 @@ title: Estimating reporting delays and nowcasting/forecasting infections with ep
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  out.width = "100%",
+  out.width = "80%",
   dpi = 330,
   message = FALSE, warning = FALSE
 )

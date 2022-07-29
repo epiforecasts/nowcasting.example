@@ -22,9 +22,9 @@ study we discuss potential issues with the approaches taken, and
 highlight areas for futher work. For more on `epinowcast` and it’s
 planned development roadmap see [the package
 documentation](https://epiforecasts.io/epinowcast/). An [alternative
-approach](est_trunc_epinow2.md) to the problem using `EpiNow2`,
-suffering from some limitations that `epinowcast` is aiming to address,
-is also available in this repository.
+approach](epinow2.md) to the problem using `EpiNow2`, suffering from
+some limitations that `epinowcast` is aiming to address, is also
+available in this repository.
 
 # Load required libraries
 
@@ -294,12 +294,12 @@ simple_nowcast <- epinowcast(
 )
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
-#> Chain 1 finished in 22.1 seconds.
-#> Chain 2 finished in 24.8 seconds.
+#> Chain 1 finished in 17.7 seconds.
+#> Chain 2 finished in 17.7 seconds.
 #> 
 #> Both chains finished successfully.
-#> Mean chain execution time: 23.4 seconds.
-#> Total execution time: 24.9 seconds.
+#> Mean chain execution time: 17.7 seconds.
+#> Total execution time: 17.8 seconds.
 ```
 
 The first thing we might want to do is look at the summarised nowcast
@@ -313,13 +313,13 @@ simple_nowcast |>
   ) |>
   tail(n = 7)
 #>    reference_date report_date delay confirm   mean median       sd    mad
-#> 1:     2020-04-15  2020-04-21     6       0 2.1965      2 1.695088 1.4826
-#> 2:     2020-04-16  2020-04-21     5       1 3.6475      3 2.043852 1.4826
-#> 3:     2020-04-17  2020-04-21     4       1 4.1905      4 2.376770 2.9652
-#> 4:     2020-04-18  2020-04-21     3       0 3.4630      3 2.590557 2.9652
-#> 5:     2020-04-19  2020-04-21     2       0 3.7585      3 2.974996 2.9652
-#> 6:     2020-04-20  2020-04-21     1       0 3.9320      3 3.219403 2.9652
-#> 7:     2020-04-21  2020-04-21     0       0 4.1205      3 3.744328 2.9652
+#> 1:     2020-04-15  2020-04-21     6       0 2.0985      2 1.656252 1.4826
+#> 2:     2020-04-16  2020-04-21     5       1 3.6420      3 1.930725 1.4826
+#> 3:     2020-04-17  2020-04-21     4       1 4.1255      4 2.217027 1.4826
+#> 4:     2020-04-18  2020-04-21     3       0 3.4360      3 2.580549 2.9652
+#> 5:     2020-04-19  2020-04-21     2       0 3.7400      3 2.939510 2.9652
+#> 6:     2020-04-20  2020-04-21     1       0 3.7945      3 3.131641 2.9652
+#> 7:     2020-04-21  2020-04-21     0       0 3.9500      3 3.559612 2.9652
 ```
 
 We can also plot this nowcast against the latest data.
@@ -347,8 +347,8 @@ simple_nowcast |>
   summary(type = "fit", variables = c("refp_mean", "refp_sd")) |>
   dplyr::select(variable, mean, median, sd, mad)
 #>        variable      mean   median         sd        mad
-#> 1: refp_mean[1] 2.0917983 2.090635 0.04155042 0.04086787
-#> 2:   refp_sd[1] 0.4520087 0.450697 0.03097683 0.03002043
+#> 1: refp_mean[1] 2.0912348 2.089710 0.04123479 0.03980040
+#> 2:   refp_sd[1] 0.4520472 0.448914 0.03112513 0.03110717
 ```
 
 In real-world data we might expect to see delays drawn from different
@@ -409,11 +409,11 @@ retro_nowcast <- retro_df |>
   ))()
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
-#> Chain 2 finished in 9.8 seconds.
-#> Chain 1 finished in 10.6 seconds.
+#> Chain 2 finished in 10.3 seconds.
+#> Chain 1 finished in 10.5 seconds.
 #> 
 #> Both chains finished successfully.
-#> Mean chain execution time: 10.2 seconds.
+#> Mean chain execution time: 10.4 seconds.
 #> Total execution time: 10.6 seconds.
 ```
 
@@ -544,9 +544,9 @@ glimpse(nowcast_cdf)
 #> Columns: 5
 #> $ Method   <chr> "epinowcast (real-time)", "epinowcast (real-time)", "epinowca…
 #> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18…
-#> $ cdf      <dbl> 4.291618e-06, 1.176850e-03, 1.470388e-02, 6.030651e-02, 1.442…
-#> $ lower_90 <dbl> 4.291618e-06, 1.176850e-03, 1.470388e-02, 6.030651e-02, 1.442…
-#> $ upper_90 <dbl> 4.291618e-06, 1.176850e-03, 1.470388e-02, 6.030651e-02, 1.442…
+#> $ cdf      <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
+#> $ lower_90 <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
+#> $ upper_90 <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
 ```
 
 ## Comparison

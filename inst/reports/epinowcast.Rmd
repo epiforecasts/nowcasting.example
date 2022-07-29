@@ -14,12 +14,12 @@ knitr::opts_chunk$set(
 
 # Summary
 
-In this report we make use of [epinowcast](https://epiforecasts.io/epinowcast/), a nowcasting package under development and designed from the ground up around nowcasting with the aim of replacing [EpiNow2](https://epiforecasts.io/EpiNow2/) for real-time usage. We first explore the data using tools from `epinowcast` alongside others. We then nowcast the latest available data, visualise our results, and discuss potential options for improving performance on real-world data. As a check of our approach we construct some retrospective data, nowcast it, and compare our nowcast to the latest available data. We then extract the estimated delay distribution and compare it to the underlying distribution used to generate the data, the empirical distribution, and the distribution estimated using simpler methods. Finally, we show how the output from `epinowcast` may be used in other surveillance packages such as `EpiNow2`. Throughout this case study we discuss potential issues with the approaches taken, and highlight areas for futher work. For more on `epinowcast` and it's planned development roadmap see [the package documentation](https://epiforecasts.io/epinowcast/). An [alternative approach](est_trunc_epinow2.md) to the problem using `EpiNow2`, suffering from some limitations that `epinowcast` is aiming to address, is also available in this repository.
+In this report we make use of [epinowcast](https://epiforecasts.io/epinowcast/), a nowcasting package under development and designed from the ground up around nowcasting with the aim of replacing [EpiNow2](https://epiforecasts.io/EpiNow2/) for real-time usage. We first explore the data using tools from `epinowcast` alongside others. We then nowcast the latest available data, visualise our results, and discuss potential options for improving performance on real-world data. As a check of our approach we construct some retrospective data, nowcast it, and compare our nowcast to the latest available data. We then extract the estimated delay distribution and compare it to the underlying distribution used to generate the data, the empirical distribution, and the distribution estimated using simpler methods. Finally, we show how the output from `epinowcast` may be used in other surveillance packages such as `EpiNow2`. Throughout this case study we discuss potential issues with the approaches taken, and highlight areas for futher work. For more on `epinowcast` and it's planned development roadmap see [the package documentation](https://epiforecasts.io/epinowcast/). An [alternative approach](epinow2.md) to the problem using `EpiNow2`, suffering from some limitations that `epinowcast` is aiming to address, is also available in this repository.
 
 # Load required libraries
 
 We first load the packages required for this case study. These can be installed using
-```{r}
+```{r, eval = FALSE}
 remotes::install_github("epiforecasts/nowcasting.example")
 ```
 

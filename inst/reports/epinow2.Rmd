@@ -15,7 +15,7 @@ In this report we make use of [EpiNow2](https://epiforecasts.io/EpiNow2/), tools
 # Load required libraries
 
 We first load the packages required for this case study. These can be installed using 
-```{r include = FALSE}
+```{r, eval = FALSE}
 remotes::install_github("epiforecasts/nowcasting.example")
 ```
 

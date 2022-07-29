@@ -11,7 +11,8 @@ Suggests:
   posterior,
   tidyr,
   fitdistrplus,
-  forcats
+  forcats,
+  purrr
 Additional_repositories: https://epiforecasts.r-universe.dev
 Remotes:
   epiforecasts/epinowcast@develop

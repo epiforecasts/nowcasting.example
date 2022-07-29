@@ -1,0 +1,21 @@
+# Data exploration
+
+We start by visualising the observed delays from onset to report.
+
+```{r plot_data}
+ggplot(df, aes(x = delay)) +
+  geom_histogram(binwidth = 1, col = "#d3d3d36e") +
+  theme_bw()
+```
+
+As expected, based on the generative model used to simulate our case study data, there are negative delays (report before onset) - possibly representing either data entry errors or positive tests during the incubation period so hard to characterise as part of the reporting delay distribution.
+
+```{r negative_delays}
+df |>
+  filter(delay < 0)
+```
+
+There is also a significant excess at delay 0, which does not connect smoothly to the rest of the distribution and therefore might represent a separate process or the combination of two processes. 
+
+
+

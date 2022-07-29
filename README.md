@@ -1,7 +1,13 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# Nowcasting example
+# Nowcasting examples
+
+This repository contains two example approaches to nowcasting, one using
+the [EpiNow2](https://epiforecasts.io/EpiNow2/) package, and one using
+the [epinowcast](https://epiforecasts.io/epinowcast/) package which is
+currently being developed to eventually replace `EpiNow2` for real-time
+applications.
 
 ## Installation
 
@@ -12,20 +18,19 @@ You can install the utility functions contained in this repo with
 devtools::install_github("epiforecasts/nowcasting.example")
 ```
 
-## Render report the `EpiNow2` report
+## Render the `EpiNow2` report
 
 To render the report, run
 
 ``` r
-rmarkdown::render("inst/reports/est_trunc_epinow2.Rmd")
+rmarkdown::render("inst/reports/epinow2.Rmd")
 ```
 
-Afterwards the report can be viewed in
-`inst/reports/est_trunc_epinow2.html`. A rendered version of the report
-is also available in [the
-repository](inst/reports/est_trunc_epinow2.md).
+Afterwards the report can be viewed in `inst/reports/epinow2.html`. A
+[rendered version](inst/reports/epinow2.md) of the report is also
+available in the repository.
 
-## Render report the `epinowcast` report
+## Render the `epinowcast` report
 
 To render the report, run
 
@@ -33,10 +38,9 @@ To render the report, run
 rmarkdown::render("inst/reports/epinowcast.Rmd")
 ```
 
-Afterwards the report can be viewed in
-`inst/reports/epinowcast.html`. A rendered version of the report
-is also available in [the
-repository](inst/reports/epinowcast.md).
+Afterwards the report can be viewed in `inst/reports/epinowcast.html`. A
+[rendered version](inst/reports/epinowcast.md) of the report is also
+available in the repository.
 
 ## Create mock dataset
 

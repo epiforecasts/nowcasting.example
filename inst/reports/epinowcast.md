@@ -4,28 +4,40 @@ epinowcast
 
 # Summary
 
-In this report we make use of `epinowcast`, an in development nowcasting
-package, designed from the ground up around nowcasting with the aim of
-replacing `EpiNow2` for real-time usage. We first explore the data using
-tools from `epinowcast` alongside others. We then nowcast the latest
-available data, visualise our results, and discussion potential options
-for improving performance on real-world data. As a check of our approach
-we construct some retrospective data, nowcast it, and compare our
-nowcast to the latest available data. We then extract the estimated
-delay distribution and compare it to the underlying distribution used to
-generate the data, the empirical distribution, and the distribution
-estimated using simpler methods. Finally, we show how the output from
-`epinowcast` may be used in other surveillance packages such as
-`EpiNow2`. Throughout this case study we discuss potential issues with
-the approaches taken, and highlight areas for futher work. For more on
-`epinowcast` and it’s planned development roadmap see [the package
-documentation](https://epiforecasts.io/epinowcast/).
+In this report we make use of
+[epinowcast](https://epiforecasts.io/epinowcast/), a nowcasting package
+under development and designed from the ground up around nowcasting with
+the aim of replacing [EpiNow2](https://epiforecasts.io/EpiNow2/) for
+real-time usage. We first explore the data using tools from `epinowcast`
+alongside others. We then nowcast the latest available data, visualise
+our results, and discuss potential options for improving performance on
+real-world data. As a check of our approach we construct some
+retrospective data, nowcast it, and compare our nowcast to the latest
+available data. We then extract the estimated delay distribution and
+compare it to the underlying distribution used to generate the data, the
+empirical distribution, and the distribution estimated using simpler
+methods. Finally, we show how the output from `epinowcast` may be used
+in other surveillance packages such as `EpiNow2`. Throughout this case
+study we discuss potential issues with the approaches taken, and
+highlight areas for futher work. For more on `epinowcast` and it’s
+planned development roadmap see [the package
+documentation](https://epiforecasts.io/epinowcast/). An [alternative
+approach](epinow2.md) to the problem using `EpiNow2`, suffering from
+some limitations that `epinowcast` is aiming to address, is also
+available in this repository.
 
 # Load required libraries
 
 We first load the packages required for this case study. These can be
-installed using the `DESCRIPTION` file provided in the
-`nowcasting.example` repository.
+installed using
+
+``` r
+remotes::install_github("epiforecasts/nowcasting.example")
+```
+
+This report is based on the current stable version `epinowcast 0.1.0`
+but we highlight below where relevant missing features are planned for
+the next version `epinowcast 0.2.0`.
 
 ``` r
 library("epinowcast")
@@ -44,16 +56,17 @@ library("forcats")
 # Load the data
 
 As in other reports in this repository this data is generated using
-`inst/scripts/create_mock_dataset.r`. The simulation model is based on
-real-world datasets and an underlying assumption that the reporting
-delay is parametric and follows a log-normal distribution with a logmean
-of 2 and a logsd of 0.5. On top of this additional processes have been
-modelled so that some proportion of cases are mising onsets, the number
-of cases with an onset reported on the same day is inflated versus what
-would be expected from a parametric distribution, and cases with a
-negative onset to report delay. Settings in
-`inst/scripts/create_mock_dataset.r` can be altered and the code in this
-case study rerun to explore other reporting scenarios.
+`inst/scripts/create_mock_dataset.r`. The simulation model is set up to
+mimic real-world datasets and an contains an underlying assumption that
+the reporting delay is parametric and follows a truncated discretised
+log-normal distribution with a logmean of 2 and a logsd of 0.5. On top
+of this additional processes have been modelled so that some proportion
+of cases are mising onsets, the number of cases with an onset reported
+on the same day is inflated versus what would be expected from a
+parametric distribution, and cases with a negative onset to report
+delay. Settings in `inst/scripts/create_mock_dataset.r` can be altered
+and the code in this case study rerun to explore other reporting
+scenarios.
 
 ``` r
 df <- load_data()
@@ -61,9 +74,9 @@ max_delay <- max(df$delay, na.rm = TRUE)
 glimpse(df)
 #> Rows: 311
 #> Columns: 3
-#> $ date_onset  <date> 2020-02-29, 2020-02-29, NA, 2020…
-#> $ report_date <date> 2020-03-18, 2020-03-05, 2020-03-…
-#> $ delay       <int> 18, 5, NA, 7, 8, 4, 11, 0, NA, 0,…
+#> $ date_onset  <date> 2020-02-29, 2020-02-29, NA, 2020-03-02, 2020-03-04, 2020-…
+#> $ report_date <date> 2020-03-18, 2020-03-05, 2020-03-05, 2020-03-09, 2020-03-1…
+#> $ delay       <int> 18, 5, NA, 7, 8, 4, 11, 0, NA, 0, 20, 5, 6, 6, 0, 0, 8, 10…
 ```
 
 # Data exploration
@@ -96,18 +109,21 @@ df |>
 ```
 
 There is also a significant excess at delay 0, which does not connect
-smoothly to the rest of the distribution and therefore seems to
-represent a separate process or the combination of two processes.
+smoothly to the rest of the distribution and therefore might represent a
+separate process or the combination of two processes.
 
 # Preprocessing and visualising the data
 
 Before we can estimate the reporting delay for onsets or nowcast
 unreporteed onsets we need to preprocess the data into a format
-`epinowcast` can make use of. We first need to restrict to delays
-greater than 0 due to the evidence for two reporting processes and
-aggregate data into the cumulative count format `epinowcast` expects.
-Note that `epinowcast` defines the target date (here the onset date) as
-the `reference_date`.
+`epinowcast` can make use of. We first restrict to delays greater than 0
+due to the evidence for two reporting processes and aggregate data into
+the cumulative count format `epinowcast` expects, removing missing data
+in the process (handling missing data in `epinocwast` is a feature
+currently [being
+implemented](https://github.com/epiforecasts/epinowcast/pull/107)). Note
+that `epinowcast` defines the target date (here the onset date) as the
+`reference_date`.
 
 ``` r
 count_df <- df |>
@@ -123,21 +139,21 @@ count_df <- df |>
 glimpse(count_df)
 #> Rows: 152
 #> Columns: 3
-#> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-…
-#> $ report_date    <date> 2020-03-05, 2020-03-18, 2020-…
-#> $ confirm        <int> 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, …
+#> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-03-02, 2020-03-04, 2020-0…
+#> $ report_date    <date> 2020-03-05, 2020-03-18, 2020-03-09, 2020-03-08, 2020-0…
+#> $ confirm        <int> 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 2, 3, 1, 1, 2, 3, 2…
 ```
 
 We can now use preprocessing functions from `epinowcast` to complete all
 combinations of report and reference dates, prepare for modelling, and
 produce a range of useful summary datasets. Note that `epinowcast`
 returns output as `data.table` but users can make use of whatever data
-manipulation tools they are most comfortable with. We first make sure
-all date combinations are present and then use a wrapper,
-`enw_preprocess_data()` to complete the rest of the required
-preprocessing steps. We set the maximum delay using the largest observed
-delay which assumes reporting after this point is not possible. In
-general, users should consider setting the maximum delay with care as
+manipulation tools they are most comfortable with (e.g., tidyverse
+tools). We first make sure all date combinations are present and then
+use a wrapper, `enw_preprocess_data()` to complete the rest of the
+required preprocessing steps. We set the maximum delay using the largest
+observed delay which assumes reporting after this point is not possible.
+In general, users should consider setting the maximum delay with care as
 larger values require significantly increased compute whilst smaller
 values may insufficiently capture reporting distributions leading to
 bias.
@@ -148,23 +164,21 @@ complete_df <- count_df |>
 glimpse(complete_df)
 #> Rows: 1,049
 #> Columns: 3
-#> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-…
-#> $ report_date    <date> 2020-02-29, 2020-03-01, 2020-…
-#> $ confirm        <int> 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, …
+#> $ reference_date <date> 2020-02-29, 2020-02-29, 2020-02-29, 2020-02-29, 2020-0…
+#> $ report_date    <date> 2020-02-29, 2020-03-01, 2020-03-02, 2020-03-03, 2020-0…
+#> $ confirm        <int> 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2…
 
 enw_df <- complete_df |>
   enw_preprocess_data(max_delay = max_delay)
 enw_df
-#>                     obs         new_confirm
-#> 1: <data.table[1019x7]> <data.table[966x9]>
-#>                latest  missing_reference
-#> 1: <data.table[53x8]> <data.table[53x4]>
-#>     reporting_triangle      metareference
-#> 1: <data.table[53x25]> <data.table[53x7]>
-#>             metareport          metadelay time
-#> 1: <data.table[75x10]> <data.table[23x4]>   53
-#>    snapshots by groups max_delay   max_date
-#> 1:        53         1        23 2020-04-21
+#>                     obs         new_confirm             latest
+#> 1: <data.table[1019x7]> <data.table[966x9]> <data.table[53x8]>
+#>     missing_reference  reporting_triangle      metareference
+#> 1: <data.table[53x4]> <data.table[53x25]> <data.table[53x7]>
+#>             metareport          metadelay time snapshots by groups max_delay
+#> 1: <data.table[75x10]> <data.table[23x4]>   53        53         1        23
+#>      max_date
+#> 1: 2020-04-21
 ```
 
 Our output contains several useful measures including the maximum date
@@ -280,12 +294,12 @@ simple_nowcast <- epinowcast(
 )
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
-#> Chain 1 finished in 28.2 seconds.
-#> Chain 2 finished in 28.9 seconds.
+#> Chain 1 finished in 17.7 seconds.
+#> Chain 2 finished in 17.7 seconds.
 #> 
 #> Both chains finished successfully.
-#> Mean chain execution time: 28.6 seconds.
-#> Total execution time: 29.0 seconds.
+#> Mean chain execution time: 17.7 seconds.
+#> Total execution time: 17.8 seconds.
 ```
 
 The first thing we might want to do is look at the summarised nowcast
@@ -298,22 +312,14 @@ simple_nowcast |>
     reference_date, report_date, delay, confirm, mean, median, sd, mad
   ) |>
   tail(n = 7)
-#>    reference_date report_date delay confirm   mean
-#> 1:     2020-04-15  2020-04-21     6       0 2.1095
-#> 2:     2020-04-16  2020-04-21     5       1 3.5955
-#> 3:     2020-04-17  2020-04-21     4       1 4.1210
-#> 4:     2020-04-18  2020-04-21     3       0 3.4525
-#> 5:     2020-04-19  2020-04-21     2       0 3.6650
-#> 6:     2020-04-20  2020-04-21     1       0 3.8490
-#> 7:     2020-04-21  2020-04-21     0       0 3.9715
-#>    median       sd    mad
-#> 1:      2 1.609287 1.4826
-#> 2:      3 1.936687 1.4826
-#> 3:      4 2.279025 1.4826
-#> 4:      3 2.693022 2.9652
-#> 5:      3 2.980640 2.9652
-#> 6:      3 3.283381 2.9652
-#> 7:      3 3.555842 2.9652
+#>    reference_date report_date delay confirm   mean median       sd    mad
+#> 1:     2020-04-15  2020-04-21     6       0 2.0985      2 1.656252 1.4826
+#> 2:     2020-04-16  2020-04-21     5       1 3.6420      3 1.930725 1.4826
+#> 3:     2020-04-17  2020-04-21     4       1 4.1255      4 2.217027 1.4826
+#> 4:     2020-04-18  2020-04-21     3       0 3.4360      3 2.580549 2.9652
+#> 5:     2020-04-19  2020-04-21     2       0 3.7400      3 2.939510 2.9652
+#> 6:     2020-04-20  2020-04-21     1       0 3.7945      3 3.131641 2.9652
+#> 7:     2020-04-21  2020-04-21     0       0 3.9500      3 3.559612 2.9652
 ```
 
 We can also plot this nowcast against the latest data.
@@ -340,12 +346,9 @@ information, or from biases introduced by our estimation method.
 simple_nowcast |>
   summary(type = "fit", variables = c("refp_mean", "refp_sd")) |>
   dplyr::select(variable, mean, median, sd, mad)
-#>        variable      mean   median         sd
-#> 1: refp_mean[1] 2.0908016 2.089835 0.04053180
-#> 2:   refp_sd[1] 0.4519487 0.450739 0.03079604
-#>           mad
-#> 1: 0.03834004
-#> 2: 0.02998633
+#>        variable      mean   median         sd        mad
+#> 1: refp_mean[1] 2.0912348 2.089710 0.04123479 0.03980040
+#> 2:   refp_sd[1] 0.4520472 0.448914 0.03112513 0.03110717
 ```
 
 In real-world data we might expect to see delays drawn from different
@@ -407,12 +410,12 @@ retro_nowcast <- retro_df |>
   )()
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
-#> Chain 1 finished in 11.9 seconds.
-#> Chain 2 finished in 12.5 seconds.
+#> Chain 2 finished in 10.3 seconds.
+#> Chain 1 finished in 10.5 seconds.
 #> 
 #> Both chains finished successfully.
-#> Mean chain execution time: 12.2 seconds.
-#> Total execution time: 12.7 seconds.
+#> Mean chain execution time: 10.4 seconds.
+#> Total execution time: 10.6 seconds.
 ```
 
 We now plot this retrospective nowcast against the latest available data
@@ -431,10 +434,9 @@ plot(retro_nowcast, latest_retro_obs) +
 
 # Comparison to simpler approaches
 
-As for our `EpiNow2` comparison here we compare the etimated delay
-distribution from `epinowcast` with empirical estimates, estimates from
-simpler methods, and the known distribution used when simulating the
-data.
+We compare the etimated delay distribution from `epinowcast` with
+empirical estimates, estimates from simpler methods, and the known
+distribution used when simulating the data.
 
 ## Empirical delay
 
@@ -532,20 +534,20 @@ extract_epinowcast_cdf <- function(nowcast) {
   )
 }
 
-epinowcast_cdf <- list(
+nowcast_cdf <- list(
   "epinowcast (real-time)" = simple_nowcast,
   "epinowcast (retrospective)" = retro_nowcast
 ) |>
   map_df(extract_epinowcast_cdf, .id = "Method")
 
-glimpse(epinowcast_cdf)
+glimpse(nowcast_cdf)
 #> Rows: 52
 #> Columns: 5
-#> $ Method   <chr> "epinowcast (real-time)", "epinowcas…
-#> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1…
-#> $ cdf      <dbl> 4.421549e-06, 1.184642e-03, 1.477282…
-#> $ lower_90 <dbl> 4.421549e-06, 1.184642e-03, 1.477282…
-#> $ upper_90 <dbl> 4.421549e-06, 1.184642e-03, 1.477282…
+#> $ Method   <chr> "epinowcast (real-time)", "epinowcast (real-time)", "epinowca…
+#> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18…
+#> $ cdf      <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
+#> $ lower_90 <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
+#> $ upper_90 <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
 ```
 
 ## Comparison
@@ -570,7 +572,7 @@ combined <- bind_rows(
   true_cdf,
   emp_cdf,
   ln_cdf,
-  epinowcast_cdf
+  nowcast_cdf
 )
 
 ggplot(combined, aes(x = delay, y = cdf, col = Method, fill = Method)) +
@@ -609,6 +611,8 @@ everything in a single model and this is a planned feature for
 `epinowcast`. Please reach out if this functionality could be of use to
 you.
 
+First we construct the data set of onsets.
+
 ``` r
 ## create a data set of onsets combining observations with nowcast estimates
 ## note  that we exclude reported cases with missing onsets but that this will 
@@ -623,15 +627,19 @@ reported_cases <- complete_df |>
   bind_rows(nowcast_cases) |>
   rename(date = reference_date) |>
   dplyr::select(date, confirm)
+```
 
+We then use the `estimate_infections` function contained in `EpiNow2` on
+this data set to estimate the reproduction number.
+
+``` r
 ## generation interval
 ## from: https://www.gov.uk/government/publications/monkeypox-outbreak-technical-briefings/investigation-into-monkeypox-outbreak-in-england-technical-briefing-1
 ## Preliminary estimate of the serial interval is 9.8 days though with high uncertainty (95% credible interval, 5.9 to 21.4).
 ## It is unclear whether this refers to the estimate of the mean, or the spread of serial intervals
-## It is also unclear whether this is growth-adjusted
-## interpreted as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
-## with sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
-## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
+## It is also unclear whether this is growth-adjusted.
+## We interpret it here as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
+## and sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
 generation_interval <- list(
   mean = 13.65,
   mean_sd = 0,
@@ -656,10 +664,17 @@ incubation_period <- list(
   max = 21
 )
 
+delays <- delay_opts(
+  ## incubation period
+  incubation_period,
+  ## reporting delay
+  est$dist
+)
+
 inf <- estimate_infections(
   reported_cases = reported_cases,
   generation_time = generation_interval,
-  delays = delay_opts(incubation_period),
+  delays = delays,
   verbose = FALSE
 )
 

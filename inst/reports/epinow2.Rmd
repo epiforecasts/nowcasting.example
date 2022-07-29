@@ -1,0 +1,122 @@
+---
+title: Estimating reporting delays and nowcasting/forecasting infections with EpiNow2
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  message = FALSE, warning = FALSE
+)
+```
+
+# Summary
+
+In this report we make use of [EpiNow2](https://epiforecasts.io/EpiNow2/), a toolset for real-time analysis of infectious disease dynamics, for estimating reporting delays and using them to conduct a nowcast. We first explore the data extract the estimated delay distribution and compare it to the the empirical distribution, and the distribution estimated using simpler methods. We then show how the these estimates may be used in `EpiNow2` to perform nowcasts, forecasts and estimation of reproduction numbers and growth rates. For more on `EpiNow2`  roadmap see [the package documentation](https://EpiNow2.io/epinowcast/). An [alternative approach](epinowcast.md) to the problem using `epinowcast`, a package undergoing active development and aiming to address some of the limitations `EpiNow2` with a view to eventually replacing it, is also available in this repository.
+
+# Load required libraries
+
+We first load the packages required for this case study. These can be installed using 
+```{r, eval = FALSE}
+remotes::install_github("epiforecasts/nowcasting.example")
+```
+
+```{r init}
+library("EpiNow2")
+library("nowcasting.example") ## devtools::install()
+library("dplyr")
+library("ggplot2")
+library("rstan")
+library("posterior")
+library("tidyr")
+library("fitdistrplus")
+```
+```{r load-data, child = "rmdchunks/load_data.Rmd"}
+```
+
+```{r data-exploration, child = "rmdchunks/data_exploration.Rmd"}
+```
+
+# Estimating the reporting delay
+
+We use `EpiNow2` to estimate the distribution of reporting delays greater than 0.
+
+```{r estimate_delays}
+positive_df <- df |>
+  filter(delay > 0)
+snapshots <- create_snapshots(positive_df, max_delay)
+est <- suppressWarnings(estimate_truncation(
+  snapshots,
+  max_truncation = max_delay,
+  chains = 2, iter = 2000,
+  verbose = FALSE
+))
+
+## parameters of lognormal fit
+est$dist
+```
+
+# Mean delay
+
+```{r pmf}
+## Extract probability mass function
+
+cmf <- rstan::extract(est$fit, "cmf")[[1]]
+colnames(cmf) <- seq(max_delay, 1, by = -1) 
+pmf <- as_draws_df(cmf) |>
+  pivot_longer(c(-.chain, -.iteration, -.draw),
+                      names_to = "delay") |>
+  mutate(delay = as.integer(delay)) |>
+  arrange(delay) |>
+  group_by(.iteration, .chain, .draw) |>
+  mutate(value = diff(c(0, value)))
+
+## Calculate per-sample mean
+mean <- pmf |>
+  group_by(.chain, .iteration, .draw) |>
+  summarise(mean = sum(delay * value), .groups = "drop") |>
+  summarise(
+    est = mean(mean),
+    lower = quantile(mean, 0.025),
+    upper = quantile(mean, 0.975)
+  )
+
+## Estimate + 95% CI of mean reporting delay
+mean
+```
+
+# Comparison to simpler approaches
+
+We compare the etimated delay distribution from `EpiNow2` with empirical estimates, estimates from simpler methods, and the known distribution used when simulating the data.
+
+```{r load-data, child = "rmdchunks/simple_dists.Rmd"}
+```
+
+## Extract the lognormal CMF from `EpiNow2`
+
+We can optain the cumulative mass function of the truncation distribution as estimated by `EpiNow2` directly:
+
+```{r epinow2-cmf}
+nowcast_cdf <- est$cmf |>
+  rename(delay = index, cdf = mean) |>
+  mutate(Method = "EpiNow2")
+```
+
+```{r load-data, child = "rmdchunks/dist_comparison.Rmd"}
+```
+
+# Nowcast
+
+First we construct the data set of onsets.
+
+```{r reported_cases}
+## create a data set of reported cases
+## (would be better to use onsets but missing data are an issue)
+reported_cases <- df |>
+  count(report_date, name = "confirm") |>
+  rename(date = report_date)
+```
+
+We then use the `estimate_infections` function contained in `EpiNow2` on this data set to obtain a nowcast, forecast and reproduction number estimate.
+
+```{r load-data, child = "rmdchunks/estimate_infections.Rmd"}
+```
+

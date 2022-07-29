@@ -1,0 +1,42 @@
+## Empirical delay
+
+We first extract the observed empirical delay which would likely be the first thing we estimate in a real-world setting. This could also be used directly for nowcasting if we were confident it was static over the timespan of our data, and the bias from truncation was small.
+
+```{r empirical}
+positive_df <- df |>
+  filter(delay > 0)
+
+x <- 1:26
+emp <- ecdf(positive_df$delay)
+emp_cdf <- data.frame(
+  delay = x,
+  cdf = emp(x),
+  Method = "Empirical"
+)
+
+tail(emp_cdf, n = 7)
+```
+
+## Discretised lognormal fitted directly
+
+As we assume the reporting distribution is static and as our infectious disease data appears to be relatively stable we could expect a direct estimate of the underlying reporting distribution to be minimally biased. In settings where we have rapid exponential growth we would expect significantly more bias and would likely need to use methods adjusted for truncation (as many nowcasting methods are or use a specialised real-time distribution estimation method). In settings where we have very little data that is not partially truncated or we expect variation in our reporting distributions over time we would also need to consider these approaches.
+
+```{r dislnorm}
+ddislnorm <- function(x, meanlog, sdlog) {
+  return(plnorm(x, meanlog, sdlog) - plnorm(x - 1, meanlog, sdlog))
+}
+pdislnorm <- plnorm
+qdislnorm <- qlnorm
+
+y <- fitdist(
+  positive_df$delay,
+  "dislnorm",
+  start = list(meanlog = 0, sdlog = 1)
+)
+ln <- pdislnorm(1:26, y$estimate[1], y$estimate[2])
+ln_cdf <- data.frame(delay = x, cdf = ln, Method = "Direct")
+
+tail(ln_cdf, n = 7)
+```
+
+

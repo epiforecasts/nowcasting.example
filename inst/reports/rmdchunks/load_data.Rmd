@@ -1,0 +1,11 @@
+# Load the data
+
+As in other reports in this repository this data is generated using `inst/scripts/create_mock_dataset.r`. The simulation model is set up to mimic real-world datasets and an contains an underlying assumption that the reporting delay is parametric and follows a truncated discretised log-normal distribution with a logmean of 2 and a logsd of 0.5. On top of this additional processes have been modelled so that some proportion of cases are mising onsets, the number of cases with an onset reported on the same day is inflated versus what would be expected from a parametric distribution, and cases with a negative onset to report delay. Settings in `inst/scripts/create_mock_dataset.r` can be altered and the code in this case study rerun to explore other reporting scenarios.
+
+```{r load_data}
+df <- load_data()
+max_delay <- max(df$delay, na.rm = TRUE)
+glimpse(df)
+```
+
+

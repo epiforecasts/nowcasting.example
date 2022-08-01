@@ -6,10 +6,14 @@ Depends:
   here
 Suggests:
   EpiNow2,
+  epinowcast,
   rstan,
   posterior,
   tidyr,
-  fitdistrplus
+  fitdistrplus,
+  forcats,
+  purrr
+Additional_repositories: https://epiforecasts.r-universe.dev
 Remotes:
-  epiforecasts/EpiNow2
+  epiforecasts/epinowcast@develop
 RoxygenNote: 7.2.0

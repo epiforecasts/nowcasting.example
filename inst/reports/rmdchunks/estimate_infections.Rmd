@@ -1,0 +1,49 @@
+```{r estimate_infections, fig.height = 9}
+## generation interval
+## from: https://www.gov.uk/government/publications/monkeypox-outbreak-technical-briefings/investigation-into-monkeypox-outbreak-in-england-technical-briefing-1
+## Preliminary estimate of the serial interval is 9.8 days though with high uncertainty (95% credible interval, 5.9 to 21.4).
+## It is unclear whether this refers to the estimate of the mean, or the spread of serial intervals
+## It is also unclear whether this is growth-adjusted.
+## We interpret it here as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
+## and sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
+generation_interval <- list(
+  mean = 13.65,
+  mean_sd = 0,
+  sd = 3.7,
+  sd_sd = 0,
+  max = 25
+)
+
+## incubation period
+## from: https://www.who.int/news-room/fact-sheets/detail/monkeypox
+## "usually from 6 to 13 days but can range from 5 to 21"
+## interpreted as log-normally distributed with 2/3 contained between 6 and 13:
+## => \mu*/\sigma* = 6; \mu^* * \sigma* = 13
+## => \mu* = 9, \sigma* = 1.5,  max = 21
+## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
+## also adding a small amount of uncertainty
+incubation_period <- list(
+  mean = log(9),
+  mean_sd = 0.1,
+  sd = log(1.5),
+  sd_sd = 0.1,
+  max = 21
+)
+
+delays <- delay_opts(
+  ## incubation period
+  incubation_period,
+  ## reporting delay
+  est$dist
+)
+
+inf <- estimate_infections(
+  reported_cases = reported_cases,
+  generation_time = generation_interval,
+  delays = delays,
+  verbose = FALSE
+)
+
+plot(inf)
+```
+

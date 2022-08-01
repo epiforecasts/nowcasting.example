@@ -1,0 +1,36 @@
+## Comparison
+
+We now compare the various approaches to estimate the reporting distribution against the known distribution used to generate the data. We see that in this simple case all methods return similiar results but that none fully capture the data generating process. This is likely due to excluding onsets reported on the same day and motivates more complex estimation methods that can account for  this. Note that the bias in these estimates will propagate through all downstream steps that make use of them and the consequences of this may be hard to estimate.
+
+```{r compare}
+true_cdf <- data.frame(
+  delay = 1:26,
+  cdf = pdislnorm(1:26, 2, 0.5) / pdislnorm(26, 2, 0.5),
+  Method = "Data generating"
+)
+
+combined <- bind_rows(
+  true_cdf,
+  emp_cdf,
+  ln_cdf,
+  nowcast_cdf
+)
+
+ggplot(combined, aes(x = delay, y = cdf, col = Method, fill = Method)) +
+  geom_line(size = 1.1, alpha = 0.7) +
+  geom_ribbon(
+    aes(ymin = lower_90, ymax = upper_90), alpha = 0.25
+  ) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  guides(
+    fill = guide_legend(nrow = 2),
+    col = guide_legend(nrow = 2)
+  ) +
+  labs(
+    x = "Delay between onset and case report",
+    y = "Cumulative density function of the reporting distribution"
+    )
+```
+
+

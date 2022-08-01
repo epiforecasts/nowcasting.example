@@ -1,0 +1,292 @@
+---
+title: Estimating reporting delays and nowcasting/forecasting infections with epinowcast
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  out.width = "80%",
+  dpi = 330,
+  message = FALSE, warning = FALSE
+)
+```
+
+# Summary
+
+In this report we make use of [epinowcast](https://epiforecasts.io/epinowcast/), a nowcasting package under development and designed from the ground up around nowcasting with the aim of replacing [EpiNow2](https://epiforecasts.io/EpiNow2/) for real-time usage. We first explore the data using tools from `epinowcast` alongside others. We then nowcast the latest available data, visualise our results, and discuss potential options for improving performance on real-world data. As a check of our approach we construct some retrospective data, nowcast it, and compare our nowcast to the latest available data. We then extract the estimated delay distribution and compare it to the underlying distribution used to generate the data, the empirical distribution, and the distribution estimated using simpler methods. Finally, we show how the output from `epinowcast` may be used in other surveillance packages such as `EpiNow2`. Throughout this case study we discuss potential issues with the approaches taken, and highlight areas for futher work. For more on `epinowcast` and it's planned development roadmap see [the package documentation](https://epiforecasts.io/epinowcast/). An [alternative approach](epinow2.md) to the problem using `EpiNow2`, suffering from some limitations that `epinowcast` is aiming to address, is also available in this repository.
+
+# Load required libraries
+
+We first load the packages required for this case study. These can be installed using
+```{r, eval = FALSE}
+remotes::install_github("epiforecasts/nowcasting.example")
+```
+
+This report is based on the current stable version `epinowcast 0.1.0` but we highlight below where relevant missing features are planned for the next version `epinowcast 0.2.0`.
+
+```{r init}
+library("epinowcast")
+library("EpiNow2")
+library("nowcasting.example") ## devtools::install()
+library("dplyr")
+library("ggplot2")
+library("rstan")
+library("posterior")
+library("tidyr")
+library("fitdistrplus")
+library("purrr")
+library("forcats")
+```
+
+```{r load-data, child = "rmdchunks/load_data.Rmd"}
+```
+
+```{r data-exploration, child = "rmdchunks/data_exploration.Rmd"}
+```
+
+# Preprocessing and visualising the data
+
+Before we can estimate the reporting delay for onsets or nowcast unreporteed onsets we need to preprocess the data into a format `epinowcast` can make use of. We first restrict to delays greater than 0 due to the evidence for two reporting processes and aggregate data into the cumulative count format `epinowcast` expects, removing missing data in the process (handling missing data in `epinocwast` is a feature currently [being implemented](https://github.com/epiforecasts/epinowcast/pull/107)). Note that `epinowcast` defines the target date (here the onset date) as the `reference_date`.
+
+```{r preprocess}
+count_df <- df |>
+  filter(delay > 0 | is.na(delay)) |>
+  rename(reference_date = date_onset) |>
+  count(reference_date, report_date, name = "confirm") |>
+  arrange(reference_date, report_date) |>
+  group_by(reference_date) |>
+  mutate(cum_confirm = cumsum(confirm)) |>
+  ungroup() |>
+  mutate(confirm = ifelse(!is.na(reference_date), cum_confirm, confirm)) |>
+  dplyr::select(-cum_confirm)
+glimpse(count_df)
+```
+
+We can now use preprocessing functions from `epinowcast` to complete all combinations of report and reference dates, prepare for modelling, and produce a range of useful summary datasets. Note that `epinowcast` returns output as `data.table` but users can make use of whatever data manipulation tools they are most comfortable with (e.g., tidyverse tools). We first make sure all date combinations are present and then use a wrapper, `enw_preprocess_data()` to complete the rest of the required preprocessing steps. We set the maximum delay using the largest observed delay which assumes reporting after this point is not possible. In general, users should consider setting the maximum delay with care as larger values require significantly increased compute whilst smaller values may insufficiently capture reporting distributions leading to bias.
+
+```{r epinowcast-preprocess}
+complete_df <- count_df |>
+  enw_complete_dates(max_delay = max_delay)
+glimpse(complete_df)
+
+enw_df <- complete_df |>
+  enw_preprocess_data(max_delay = max_delay)
+enw_df
+```
+
+Our output contains several useful measures including the maximum date of observations, the maximum delay, the number of days included in the dataset, and the number of groups (here only one but this feature allows us to nowcast over stratifications such as age or location or a combination of multiple variables).
+
+To start with we may want to plot the latest available data alongside some previous updates (blue bars become increasingly pale as data get more recent) and the data by date of report (grey bars).
+
+```{r latest-data}
+enw_df$new_confirm[[1]] |>
+  mutate(report_date = case_when(
+    report_date <= as.Date("2020-03-15") ~ as.Date("2020-03-15"),
+    report_date <= as.Date("2020-04-01") ~ as.Date("2020-04-01"),
+    report_date <= as.Date("2020-04-15") ~ as.Date("2020-04-15"),
+    report_date <= max(report_date) ~ as.Date(max(report_date))
+  )) |>
+  group_by(reference_date, report_date) |>
+  summarise(confirm = sum(new_confirm), .groups = "drop") |>
+  mutate(report_date = factor(report_date) |>
+    forcats::fct_rev()
+  ) |>
+  ggplot() +
+  aes(
+    x = reference_date, y = confirm, fill = report_date, group = report_date
+  ) +
+  geom_col(
+    data = enw_df$new_confirm[[1]] |>
+      group_by(report_date) |>
+      summarise(confirm = sum(new_confirm)),
+    fill = "lightgrey", alpha = 0.8,
+    aes(x = report_date)
+  ) +
+  geom_col(position = "stack", alpha = 1, col = "lightgrey") +
+  geom_vline(
+    aes(xintercept = as.Date(report_date)), linetype = 2, alpha = 0.9
+  ) +
+  scale_y_continuous(labels = ~ scales::comma(.x, accuracy = 1)) +
+  scale_fill_brewer(palette = "Blues") +
+  theme_bw() +
+  labs(
+    x = "Date of onset", y = "Reported cases with onset", fill = "Report date"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+For many use cases (such as estimating the effective reproduction number) if the proportion of missing onsets is stable over the timespan considered then no bias will be introduced by excluding missing data. However, where the proportion of missing onsets does vary over time bias will be introduced. Dealing with this bias is part of the development roadmap  for `epinowcast 0.2.0`. Here we plot this proportion over time and see that as expected it appears stable over time though daily estimates are clearly impacted by varying sample size and stochastic variation.
+
+```{r missing-data}
+enw_df$missing_reference[[1]] |>
+  as_tibble() |>
+  filter(report_date >= "2020-03-11") |>
+  ggplot() +
+  aes(x = report_date, y = prop_missing) +
+  geom_col(fill = "lightblue") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  labs(x = "Report date of onsets", y = "Proportion of cases missing onsets")
+```
+
+# Nowcasting
+
+`epinowcast` implements a generic and extended form of one of the most common nowcasting approaches. This involves decomposing the task into two sub-models: an expectation model that captures the evolution of the underlying count data (here by default a daily random walk on the log scale), and a reporting model specified using the discrete hazard of a case being reported after a given number of days. More on the methodology of this implementation and its links to previous literature can be found [here](https://epiforecasts.io/epinowcast/). 
+
+
+Here we use a simple model that assumes a Poisson observation process and a parametric log-normal reporting distribution. As a first step, we need to compile the `epinowcast` model, we do this with `threads = TRUE` in order to support multi-threading to speed up estimation, and define our fitting options (note these are passed to `cmdstanr` which is the backend tool used in `epinowcast` for model fitting).
+
+```{r fit-opts}
+model <- enw_model(threads = TRUE)
+
+fit_opts <- enw_fit_opts(
+    chains = 2, parallel_chains = 2, threads_per_chain = 2,
+    iter_sampling = 1000, iter_warmup = 1000, adapt_delta = 0.9,
+    show_messages = FALSE, refresh = 0, pp = TRUE
+)
+```
+
+We can then fit our nowcasting model. If interested in what each component is doing the output can be inspected interactively (for example the output of `enw_obs(family = "poisson", data = enw_df)` are observations preprocessed into the format required for modelling).
+
+```{r simple-epinowcast}
+simple_nowcast <- epinowcast(
+  obs = enw_obs(family = "poisson", data = enw_df),
+  data = enw_df, model = model, fit = fit_opts,
+)
+```
+
+The first thing we might want to do is look at the summarised nowcast for the last week.
+
+```{r summarised-simple-nowcast}
+simple_nowcast |>
+  summary(probs = c(0.05, 0.95)) |>
+  dplyr::select(
+    reference_date, report_date, delay, confirm, mean, median, sd, mad
+  ) |>
+  tail(n = 7)
+```
+
+We can also plot this nowcast against the latest data.
+
+```{r plot-simple-nowcast}
+simple_nowcast |>
+  plot() +
+  labs(x = "Onset date", y = "Reported cases by onset date")
+```
+
+Finally, we can also look at the posterior estimates for the parametric delay distribution (remembering that a logmean of 2 and a logsd of 0.5 was used to generate the simulated data). Here `refp_mean` denotes the logmean and `refp_sd` denotes the log standard deviation. We see our estimates are close to those from the data generating process though don't cover them at the 90% credible interval. This may be driven by bias in the generating process, (as 0 delays are excluded), by our use of a distribution truncated by the maximum delay, inherent loss/lack of information, or from biases introduced by our estimation method.
+
+```{r}
+simple_nowcast |>
+  summary(type = "fit", variables = c("refp_mean", "refp_sd")) |>
+  dplyr::select(variable, mean, median, sd, mad)
+```
+
+In real-world data we might expect to see delays drawn from different distributions or no apparent distribution, time-varying delays in reporting, overdispersed reporting, and the likelihood of reporting varying by report date (i.e due to the day of the week etc.). All of these complexities can be modelled using `epinowcast 0.1.0`.
+
+As we saw in our data, we also have negative delays, overinflated counts with zero delays, reported cases missing onsets and a clear day of the week effect in the underlying simulated data. Modelling all of these features, rather than exluding them or ignoring them, would likely reduce bias. These features, exluding negative delays, are on the roadmap for `epinowcast 0.2.0`. Please reach out if they would be of use to you. Negative delays are potentially the most complex modelling issue as they are technically not possible if we define a reporting date to be later than or equal to the reference date, which is how many nowcasting models work. We instead need a different generative process that leads to both of these observations. This extension is planned for a future version of `epinowcast` but not currently in the roadmap.
+
+# Retrospective evaluation
+
+In order to understand how well our nowcasting method is working in real-time it can be useful to have an understanding on how well it did on past data that is now more fully reported. Here we produce another nowcast, in the same way as before, but on a reconstructed version of what we think the data available on the 1st of April 2020 would have looked like. The first step is to construct this retrospective data and to extract what the latest data looks like for this time period.
+
+```{r make-retro-df}
+retro_df <- complete_df |>
+ enw_filter_report_dates(latest_date = "2020-04-01")
+
+latest_retro_obs <- complete_df |>
+  enw_latest_data() |>
+  enw_filter_reference_dates(latest_date = "2020-04-01")
+tail(latest_retro_obs, n = 5)
+```
+
+We can now preprocess the data as before and fit the same nowcasting model. Note it is significantly faster to fit as less data is being used.
+
+```{r retro_nowcast}
+retro_nowcast <- retro_df |>
+  enw_preprocess_data(max_delay = max_delay) |>
+  (\(data) epinowcast(
+    obs = enw_obs(family = "poisson", data = data),
+    data = data, model = model, fit = fit_opts
+    )
+  )()
+```
+
+We now plot this retrospective nowcast against the latest available data (noting that some of the more recently reported data may not be fully complete yet). Here we see our approach is doing relatively well at capturing the lastest available obserservations (triangles) using the data available at the time (circles) though perhaps is a little more uncertain than we might ideally like.
+
+```{r plot-retro-nowcast}
+plot(retro_nowcast, latest_retro_obs) +
+  labs(x = "Onset date", y = "Reported cases by onset date")
+```
+
+# Comparison to simpler approaches
+
+We compare the etimated delay distribution from `epinowcast` with empirical estimates, estimates from simpler methods, and the known distribution used when simulating the data.
+
+```{r load-data, child = "rmdchunks/simple_dists.Rmd"}
+```
+
+## Extract the lognormal CMF from `epinowcast`
+
+As we have produced posterior samples of the log-normal distribution summary parameters when producing a nowcast with `epinowcast` we can calculate the log-normal CMF posterior from them using the following code.
+
+```{r}
+extract_epinowcast_cdf <- function(nowcast) {
+  nowcast |>
+  (\(x) x$fit[[1]]$draws(variables = c("refp_mean", "refp_sd")))() |>
+  as_draws_df() |>
+  mutate(cdf = purrr::map2(
+    `refp_mean[1]`, `refp_sd[1]`,
+    ~ tibble(
+      delay = 1:26, cdf = pdislnorm(1:26, .x, .y) /  pdislnorm(26, .x, .y)
+    ))
+  ) |>
+  unnest(cdf) |>
+  group_by(delay) |>
+  summarise(
+    cdf = mean(cdf),
+    lower_90 = quantile(cdf, probs = 0.05),
+    upper_90 = quantile(cdf, probs = 0.95)
+  )
+}
+
+nowcast_cdf <- list(
+  "epinowcast (real-time)" = simple_nowcast,
+  "epinowcast (retrospective)" = retro_nowcast
+) |>
+  map_df(extract_epinowcast_cdf, .id = "Method")
+
+glimpse(nowcast_cdf)
+```
+
+```{r load-data, child = "rmdchunks/dist_comparison.Rmd"}
+```
+
+# Estimate the effective reproduction number using nowcast onsets
+
+We now give an example of a potential use case estimating the effective reproduction number in real-time using `EpiNow2`. Note that here we make use of cases by date of onset but exclude onsets with a zero day delay in reporting, onsets with a negative day delay in reporting, and reported cases missing a onset date. In this example, where we know these proportions are static this will not introdue bias but in general this may not be the case. Note that we also only use the median posterior nowcast estimate and so our effective reproduction number estimates will be spuriously precise closer to the date of estimation. A simple approach to deal with this is to re-estimate for multiple posterior nowocast samples. A more robust approach is to estimate everything in a single model and this is a planned feature for `epinowcast`. Please reach out if this functionality could be of use to you.
+
+First we construct the data set of onsets.
+
+```{r reported_cases}
+## create a data set of onsets combining observations with nowcast estimates
+## note  that we exclude reported cases with missing onsets but that this will 
+## only introduce bias if the proportion missing varies over time.
+
+nowcast_cases <- summary(simple_nowcast) |>
+  mutate(confirm = median)
+
+reported_cases <- complete_df |>
+  enw_latest_data() |>
+  filter(reference_date < min(nowcast_cases$reference_date)) |>
+  bind_rows(nowcast_cases) |>
+  rename(date = reference_date) |>
+  dplyr::select(date, confirm)
+```
+
+We then use the `estimate_infections` function contained in `EpiNow2` on this data set to estimate the reproduction number.
+
+```{r load-data, child = "rmdchunks/estimate_infections.Rmd"}
+```
+

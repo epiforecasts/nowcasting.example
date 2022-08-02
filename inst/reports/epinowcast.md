@@ -294,12 +294,12 @@ simple_nowcast <- epinowcast(
 )
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
-#> Chain 1 finished in 48.1 seconds.
-#> Chain 2 finished in 48.1 seconds.
+#> Chain 1 finished in 24.1 seconds.
+#> Chain 2 finished in 24.2 seconds.
 #> 
 #> Both chains finished successfully.
-#> Mean chain execution time: 48.1 seconds.
-#> Total execution time: 48.2 seconds.
+#> Mean chain execution time: 24.2 seconds.
+#> Total execution time: 24.4 seconds.
 ```
 
 The first thing we might want to do is look at the summarised nowcast
@@ -313,13 +313,13 @@ simple_nowcast |>
   ) |>
   tail(n = 7)
 #>    reference_date report_date delay confirm   mean median       sd    mad
-#> 1:     2020-04-15  2020-04-21     6       0 2.0420      2 1.612618 1.4826
-#> 2:     2020-04-16  2020-04-21     5       1 3.6155      3 2.004662 1.4826
-#> 3:     2020-04-17  2020-04-21     4       1 4.0660      4 2.163789 1.4826
-#> 4:     2020-04-18  2020-04-21     3       0 3.3670      3 2.454857 2.9652
-#> 5:     2020-04-19  2020-04-21     2       0 3.6775      3 2.798466 2.9652
-#> 6:     2020-04-20  2020-04-21     1       0 3.7655      3 3.096983 2.9652
-#> 7:     2020-04-21  2020-04-21     0       0 3.8485      3 3.324917 2.9652
+#> 1:     2020-04-15  2020-04-21     6       0 2.1275      2 1.676201 1.4826
+#> 2:     2020-04-16  2020-04-21     5       1 3.6195      3 1.960776 1.4826
+#> 3:     2020-04-17  2020-04-21     4       1 4.1530      4 2.322561 1.4826
+#> 4:     2020-04-18  2020-04-21     3       0 3.5490      3 2.710401 2.9652
+#> 5:     2020-04-19  2020-04-21     2       0 3.7140      3 3.262748 2.9652
+#> 6:     2020-04-20  2020-04-21     1       0 3.9770      3 3.588999 2.9652
+#> 7:     2020-04-21  2020-04-21     0       0 4.1245      3 4.363774 2.9652
 ```
 
 We can also plot this nowcast against the latest data.
@@ -347,8 +347,8 @@ simple_nowcast |>
   summary(type = "fit", variables = c("refp_mean", "refp_sd")) |>
   dplyr::select(variable, mean, median, sd, mad)
 #>        variable      mean   median         sd        mad
-#> 1: refp_mean[1] 2.0913519 2.090675 0.03949202 0.04001537
-#> 2:   refp_sd[1] 0.4516098 0.448813 0.03104717 0.03086847
+#> 1: refp_mean[1] 2.0906628 2.090190 0.04155905 0.04071961
+#> 2:   refp_sd[1] 0.4520799 0.450263 0.03108413 0.03078693
 ```
 
 In real-world data we might expect to see delays drawn from different
@@ -410,12 +410,12 @@ retro_nowcast <- retro_df |>
   )()
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
-#> Chain 1 finished in 15.3 seconds.
-#> Chain 2 finished in 18.0 seconds.
+#> Chain 2 finished in 15.7 seconds.
+#> Chain 1 finished in 15.8 seconds.
 #> 
 #> Both chains finished successfully.
-#> Mean chain execution time: 16.7 seconds.
-#> Total execution time: 18.1 seconds.
+#> Mean chain execution time: 15.7 seconds.
+#> Total execution time: 16.0 seconds.
 ```
 
 We now plot this retrospective nowcast against the latest available data
@@ -531,7 +531,8 @@ extract_epinowcast_cdf <- function(nowcast) {
     mean = mean(cdf),
     lower_90 = quantile(cdf, probs = 0.05),
     upper_90 = quantile(cdf, probs = 0.95)
-  )
+  ) |>
+  rename(cdf = mean)
 }
 
 nowcast_cdf <- list(
@@ -545,9 +546,9 @@ glimpse(nowcast_cdf)
 #> Columns: 5
 #> $ Method   <chr> "epinowcast (real-time)", "epinowcast (real-time)", "epinowca…
 #> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18…
-#> $ mean     <dbl> 4.259644e-06, 1.169958e-03, 1.465157e-02, 6.020059e-02, 1.441…
-#> $ lower_90 <dbl> 1.400557e-07, 2.867514e-04, 7.029033e-03, 3.920939e-02, 1.090…
-#> $ upper_90 <dbl> 0.0000162918, 0.0027810949, 0.0254961109, 0.0860566368, 0.183…
+#> $ cdf      <dbl> 4.412032e-06, 1.190595e-03, 1.481482e-02, 6.063931e-02, 1.448…
+#> $ lower_90 <dbl> 1.403677e-07, 2.848314e-04, 6.990544e-03, 3.903321e-02, 1.098…
+#> $ upper_90 <dbl> 1.772726e-05, 2.948889e-03, 2.570660e-02, 8.678727e-02, 1.845…
 ```
 
 ## Comparison

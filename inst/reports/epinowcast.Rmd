@@ -248,7 +248,8 @@ extract_epinowcast_cdf <- function(nowcast) {
     mean = mean(cdf),
     lower_90 = quantile(cdf, probs = 0.05),
     upper_90 = quantile(cdf, probs = 0.95)
-  )
+  ) |>
+  rename(cdf = mean)
 }
 
 nowcast_cdf <- list(

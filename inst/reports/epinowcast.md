@@ -294,12 +294,12 @@ simple_nowcast <- epinowcast(
 )
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
-#> Chain 1 finished in 17.7 seconds.
-#> Chain 2 finished in 17.7 seconds.
+#> Chain 1 finished in 48.1 seconds.
+#> Chain 2 finished in 48.1 seconds.
 #> 
 #> Both chains finished successfully.
-#> Mean chain execution time: 17.7 seconds.
-#> Total execution time: 17.8 seconds.
+#> Mean chain execution time: 48.1 seconds.
+#> Total execution time: 48.2 seconds.
 ```
 
 The first thing we might want to do is look at the summarised nowcast
@@ -313,13 +313,13 @@ simple_nowcast |>
   ) |>
   tail(n = 7)
 #>    reference_date report_date delay confirm   mean median       sd    mad
-#> 1:     2020-04-15  2020-04-21     6       0 2.0985      2 1.656252 1.4826
-#> 2:     2020-04-16  2020-04-21     5       1 3.6420      3 1.930725 1.4826
-#> 3:     2020-04-17  2020-04-21     4       1 4.1255      4 2.217027 1.4826
-#> 4:     2020-04-18  2020-04-21     3       0 3.4360      3 2.580549 2.9652
-#> 5:     2020-04-19  2020-04-21     2       0 3.7400      3 2.939510 2.9652
-#> 6:     2020-04-20  2020-04-21     1       0 3.7945      3 3.131641 2.9652
-#> 7:     2020-04-21  2020-04-21     0       0 3.9500      3 3.559612 2.9652
+#> 1:     2020-04-15  2020-04-21     6       0 2.0420      2 1.612618 1.4826
+#> 2:     2020-04-16  2020-04-21     5       1 3.6155      3 2.004662 1.4826
+#> 3:     2020-04-17  2020-04-21     4       1 4.0660      4 2.163789 1.4826
+#> 4:     2020-04-18  2020-04-21     3       0 3.3670      3 2.454857 2.9652
+#> 5:     2020-04-19  2020-04-21     2       0 3.6775      3 2.798466 2.9652
+#> 6:     2020-04-20  2020-04-21     1       0 3.7655      3 3.096983 2.9652
+#> 7:     2020-04-21  2020-04-21     0       0 3.8485      3 3.324917 2.9652
 ```
 
 We can also plot this nowcast against the latest data.
@@ -347,8 +347,8 @@ simple_nowcast |>
   summary(type = "fit", variables = c("refp_mean", "refp_sd")) |>
   dplyr::select(variable, mean, median, sd, mad)
 #>        variable      mean   median         sd        mad
-#> 1: refp_mean[1] 2.0912348 2.089710 0.04123479 0.03980040
-#> 2:   refp_sd[1] 0.4520472 0.448914 0.03112513 0.03110717
+#> 1: refp_mean[1] 2.0913519 2.090675 0.03949202 0.04001537
+#> 2:   refp_sd[1] 0.4516098 0.448813 0.03104717 0.03086847
 ```
 
 In real-world data we might expect to see delays drawn from different
@@ -410,12 +410,12 @@ retro_nowcast <- retro_df |>
   )()
 #> Running MCMC with 2 parallel chains, with 2 thread(s) per chain...
 #> 
-#> Chain 2 finished in 10.3 seconds.
-#> Chain 1 finished in 10.5 seconds.
+#> Chain 1 finished in 15.3 seconds.
+#> Chain 2 finished in 18.0 seconds.
 #> 
 #> Both chains finished successfully.
-#> Mean chain execution time: 10.4 seconds.
-#> Total execution time: 10.6 seconds.
+#> Mean chain execution time: 16.7 seconds.
+#> Total execution time: 18.1 seconds.
 ```
 
 We now plot this retrospective nowcast against the latest available data
@@ -528,7 +528,7 @@ extract_epinowcast_cdf <- function(nowcast) {
   unnest(cdf) |>
   group_by(delay) |>
   summarise(
-    cdf = mean(cdf),
+    mean = mean(cdf),
     lower_90 = quantile(cdf, probs = 0.05),
     upper_90 = quantile(cdf, probs = 0.95)
   )
@@ -545,9 +545,9 @@ glimpse(nowcast_cdf)
 #> Columns: 5
 #> $ Method   <chr> "epinowcast (real-time)", "epinowcast (real-time)", "epinowca…
 #> $ delay    <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18…
-#> $ cdf      <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
-#> $ lower_90 <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
-#> $ upper_90 <dbl> 4.360770e-06, 1.185808e-03, 1.476351e-02, 6.046773e-02, 1.445…
+#> $ mean     <dbl> 4.259644e-06, 1.169958e-03, 1.465157e-02, 6.020059e-02, 1.441…
+#> $ lower_90 <dbl> 1.400557e-07, 2.867514e-04, 7.029033e-03, 3.920939e-02, 1.090…
+#> $ upper_90 <dbl> 0.0000162918, 0.0027810949, 0.0254961109, 0.0860566368, 0.183…
 ```
 
 ## Comparison
@@ -629,8 +629,8 @@ reported_cases <- complete_df |>
   dplyr::select(date, confirm)
 ```
 
-We then use the `estimate_infections` function contained in `EpiNow2` on
-this data set to estimate the reproduction number.
+Next, we set the necessary parameters for estimating the reproduction
+number:
 
 ``` r
 ## generation interval
@@ -663,14 +663,21 @@ incubation_period <- list(
   sd_sd = 0.1,
   max = 21
 )
+```
 
+We model onsets so there is no additional delay beyond the incubation
+period
+
+``` r
 delays <- delay_opts(
-  ## incubation period
-  incubation_period,
-  ## reporting delay
-  est$dist
+  incubation_period
 )
+```
 
+We then use the `estimate_infections` function contained in `EpiNow2` on
+this data set to estimate the reproduction number.
+
+``` r
 inf <- estimate_infections(
   reported_cases = reported_cases,
   generation_time = generation_interval,

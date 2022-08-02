@@ -245,7 +245,7 @@ extract_epinowcast_cdf <- function(nowcast) {
   unnest(cdf) |>
   group_by(delay) |>
   summarise(
-    cdf = mean(cdf),
+    mean = mean(cdf),
     lower_90 = quantile(cdf, probs = 0.05),
     upper_90 = quantile(cdf, probs = 0.95)
   )

@@ -115,6 +115,21 @@ reported_cases <- df |>
   rename(date = report_date)
 ```
 
+Next, we set the necessary parameters for estimating the reproduction number:
+
+
+```{r load-data, child = "rmdchunks/set_epinow2_parameters.Rmd"}
+```
+
+We model reports so there is the reporting delay (i.e., the estimated truncation distribution) as well as the incubation period to consider.
+
+```{r delays}
+delays <- delay_opts(
+  incubation_period,
+  est$dist
+)
+```
+
 We then use the `estimate_infections` function contained in `EpiNow2` on this data set to obtain a nowcast, forecast and reproduction number estimate.
 
 ```{r load-data, child = "rmdchunks/estimate_infections.Rmd"}

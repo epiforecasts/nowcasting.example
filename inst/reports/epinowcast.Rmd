@@ -285,6 +285,20 @@ reported_cases <- complete_df |>
   dplyr::select(date, confirm)
 ```
 
+Next, we set the necessary parameters for estimating the reproduction number:
+
+
+```{r load-data, child = "rmdchunks/set_epinow2_parameters.Rmd"}
+```
+
+We model onsets so there is no additional delay beyond the incubation period
+
+```{r delays}
+delays <- delay_opts(
+  incubation_period
+)
+```
+
 We then use the `estimate_infections` function contained in `EpiNow2` on this data set to estimate the reproduction number.
 
 ```{r load-data, child = "rmdchunks/estimate_infections.Rmd"}

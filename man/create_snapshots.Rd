@@ -4,12 +4,16 @@
 \alias{create_snapshots}
 \title{n/a}
 \usage{
-create_snapshots(x, max_delay)
+create_snapshots(x, max_delay, second = "report_date", first = "date_onset")
 }
 \arguments{
 \item{x}{data frame containing `report_date` and `date_onset` columns}
 
 \item{max_delay}{maximum delay}
+
+\item{second}{name of the secondary (reporting) column}
+
+\item{first}{name of the primary (outcome) column}
 }
 \value{
 a list of data frames to feed into `estimate_truncation`

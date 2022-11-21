@@ -16,4 +16,4 @@ Suggests:
 Additional_repositories: https://epiforecasts.r-universe.dev
 Remotes:
   epiforecasts/epinowcast@develop
-RoxygenNote: 7.2.0
+RoxygenNote: 7.2.2

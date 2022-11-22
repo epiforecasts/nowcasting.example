@@ -21,6 +21,7 @@ load_data <- function() {
 ##' @param max_delay maximum delay
 ##' @param second name of the secondary (reporting) column
 ##' @param first name of the primary (outcome) column
+##' @param continuous whether a continuous series of snapshots needs to be returned
 ##' @return a list of data frames to feed into `estimate_truncation`
 ##' @importFrom purrr map
 ##' @importFrom dplyr arrange count pull rename filter
@@ -29,7 +30,7 @@ load_data <- function() {
 ##' @author Sebastian Funk
 ##' @export
 create_snapshots <- function(x, max_delay, second = "report_date",
-                             first = "date_onset") {
+                             first = "date_onset", continuous = FALSE) {
   ## remove NA and sort
   x <- x |>
     dplyr::rename(..first = sym(!!first),
@@ -40,6 +41,15 @@ create_snapshots <- function(x, max_delay, second = "report_date",
     dplyr::filter(..second >= min_report_date) |>
     dplyr::pull(..second) |>
     unique()
+  if (continuous) {
+    gaps <- c(
+      1, as.integer(report_dates[-1] - 1) != report_dates[-length(report_dates)]
+    )
+    uninterrupted <- sum(cumsum(rev(gaps)) == 0)
+    report_dates <-
+      report_dates[seq(length(report_dates) - uninterrupted + 1,
+                       length(report_dates))]
+  }
   ## generate snapshots
   snapshots <- purrr::map(
     report_dates,
@@ -55,5 +65,6 @@ create_snapshots <- function(x, max_delay, second = "report_date",
       ) |>
       dplyr::rename(date = `..first`)
     )
+  names(snapshots) <- report_dates
   return(snapshots)
 }

@@ -6,11 +6,9 @@
 ## It is also unclear whether this is growth-adjusted.
 ## We interpret it here as discretised gamma distributed with mean (5.9 + 21.4) / 2 = 13.65
 ## and sd = sqrt(13.65) = 3.7 (THIS IS FOR ILLUSTRATION ONLY AND SHOULD NOT BE USED)
-generation_interval <- list(
+generation_interval <- Gamma(
   mean = 13.65,
-  mean_sd = 0,
   sd = 3.7,
-  sd_sd = 0,
   max = 25
 )
 
@@ -22,11 +20,9 @@ generation_interval <- list(
 ## => \mu* = 9, \sigma* = 1.5,  max = 21
 ## (see https://en.wikipedia.org/wiki/Log-normal_distribution#Scatter_intervals)
 ## also adding a small amount of uncertainty
-incubation_period <- list(
-  mean = log(9),
-  mean_sd = 0.1,
-  sd = log(1.5),
-  sd_sd = 0.1,
+incubation_period <- LogNormal(
+  meanlog = Normal(log(9), 0.1),
+  sdlog = Normal(log(1.5), 0.1),
   max = 21
 )
 ```

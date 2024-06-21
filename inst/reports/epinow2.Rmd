@@ -14,9 +14,9 @@ In this report we make use of [EpiNow2](https://epiforecasts.io/EpiNow2/), a too
 
 # Load required libraries
 
-We first load the packages required for this case study. These can be installed using 
+We first load the packages required for this case study. These can be installed using
 ```{r, eval = FALSE}
-remotes::install_github("epiforecasts/nowcasting.example")
+remotes::install_github("epiforecasts/nowcasting.example", dependencies = TRUE)
 ```
 
 ```{r init}
@@ -45,7 +45,13 @@ positive_df <- df |>
 snapshots <- create_snapshots(positive_df, max_delay)
 est <- suppressWarnings(estimate_truncation(
   snapshots,
-  max_truncation = max_delay,
+  truncation = trunc_opts(
+    LogNormal(
+      meanlog = Normal(0, 1),
+      sdlog = Normal(1, 1),
+      max = max_delay
+    )
+  ),
   chains = 2, iter = 2000,
   verbose = FALSE
 ))
@@ -59,8 +65,8 @@ est$dist
 ```{r pmf}
 ## Extract probability mass function
 
-cmf <- rstan::extract(est$fit, "cmf")[[1]]
-colnames(cmf) <- seq(max_delay, 1, by = -1) 
+cmf <- rstan::extract(est$fit, "trunc_rev_cmf")[[1]]
+colnames(cmf) <- seq(max_delay + 1, 1, by = -1)
 pmf <- as_draws_df(cmf) |>
   pivot_longer(c(-.chain, -.iteration, -.draw),
                       names_to = "delay") |>
@@ -124,14 +130,10 @@ Next, we set the necessary parameters for estimating the reproduction number:
 We model reports so there is the reporting delay (i.e., the estimated truncation distribution) as well as the incubation period to consider.
 
 ```{r delays}
-delays <- delay_opts(
-  incubation_period,
-  est$dist
-)
+delays <- incubation_period + est$dist
 ```
 
 We then use the `estimate_infections` function contained in `EpiNow2` on this data set to obtain a nowcast, forecast and reproduction number estimate.
 
 ```{r load-data, child = "rmdchunks/estimate_infections.Rmd"}
 ```
-

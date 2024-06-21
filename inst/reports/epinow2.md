@@ -104,6 +104,7 @@ separate process or the combination of two processes.
 
 We use `EpiNow2` to estimate the distribution of reporting delays
 greater than 0.
+We use a lognormal prior for this distribution with `meanlog` 0 (sd 1) and `sdlog` 1 (sd 1).
 
 ``` r
 positive_df <- df |>
@@ -111,7 +112,13 @@ positive_df <- df |>
 snapshots <- create_snapshots(positive_df, max_delay)
 est <- suppressWarnings(estimate_truncation(
   snapshots,
-  max_truncation = max_delay,
+  truncation = trunc_opts(
+    LogNormal(
+      meanlog = Normal(0, 1),
+      sdlog = Normal(1, 1),
+      max = max_delay
+    )
+  ), 
   chains = 2, iter = 2000,
   verbose = FALSE
 ))
@@ -140,7 +147,7 @@ est$dist
 ``` r
 ## Extract probability mass function
 
-cmf <- rstan::extract(est$fit, "cmf")[[1]]
+cmf <- rstan::extract(est$fit, "trunc_rev_cmf")[[1]]
 colnames(cmf) <- seq(max_delay, 1, by = -1) 
 pmf <- as_draws_df(cmf) |>
   pivot_longer(c(-.chain, -.iteration, -.draw),

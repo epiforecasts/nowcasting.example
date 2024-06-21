@@ -1,8 +1,8 @@
 ```{r estimate_infections, fig.height = 9}
 inf <- estimate_infections(
-  reported_cases = reported_cases,
-  generation_time = generation_interval,
-  delays = delays,
+  data = reported_cases,
+  generation_time = generation_time_opts(generation_interval),
+  delays = delay_opts(delays),
   verbose = FALSE
 )
 

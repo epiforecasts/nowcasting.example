@@ -3,6 +3,8 @@
 
 # Nowcasting examples
 
+> **Archived.** No longer maintained; last updated September 2024.
+
 This repository contains two example approaches to nowcasting, one using
 the [EpiNow2](https://epiforecasts.io/EpiNow2/) package, and one using
 the [epinowcast](https://epiforecasts.io/epinowcast/) package which is
